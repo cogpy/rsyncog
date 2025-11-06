@@ -118,14 +118,20 @@ time_t error_recovery_get_retry_delay(struct error_recovery_context *ctx,
                                      int attempt)
 {
     time_t delay;
+    int multiplier;
+    int i;
     
     if (!ctx)
         return 0;
     
-    /* Exponential backoff */
+    /* Calculate exponential backoff using integer math */
     delay = ctx->config.retry_delay;
     if (attempt > 1) {
-        delay *= pow(ctx->config.backoff_multiplier, attempt - 1);
+        multiplier = 1;
+        for (i = 1; i < attempt; i++) {
+            multiplier *= ctx->config.backoff_multiplier;
+        }
+        delay *= multiplier;
     }
     
     return delay;

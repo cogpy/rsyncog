@@ -350,6 +350,9 @@ static void simulate_production_workload(struct monitor_stats *stats,
     double duration;
     int success;
     
+    /* Seed random number generator */
+    srand(time(NULL));
+    
     for (i = 0; i < 50; i++) {
         /* Check rate limit */
         if (!rate_limiter_allow(limiter)) {

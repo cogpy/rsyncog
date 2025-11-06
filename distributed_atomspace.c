@@ -181,32 +181,40 @@ static struct atom *deserialize_atom(const char *buffer, size_t bufsize)
 static int connect_to_node(const char *hostname, int port)
 {
     int sock;
-    struct sockaddr_in addr;
-    struct hostent *host;
+    struct addrinfo hints, *result, *rp;
+    char port_str[16];
+    int ret;
     
-    /* Create socket */
-    sock = socket(AF_INET, SOCK_STREAM, 0);
-    if (sock < 0)
-        return -1;
+    /* Setup hints for getaddrinfo */
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;     /* Allow IPv4 or IPv6 */
+    hints.ai_socktype = SOCK_STREAM;
+    hints.ai_protocol = IPPROTO_TCP;
+    
+    /* Convert port to string */
+    snprintf(port_str, sizeof(port_str), "%d", port);
     
     /* Resolve hostname */
-    host = gethostbyname(hostname);
-    if (!host) {
-        close(sock);
+    ret = getaddrinfo(hostname, port_str, &hints, &result);
+    if (ret != 0)
         return -1;
+    
+    /* Try each address until we successfully connect */
+    for (rp = result; rp != NULL; rp = rp->ai_next) {
+        sock = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
+        if (sock < 0)
+            continue;
+        
+        if (connect(sock, rp->ai_addr, rp->ai_addrlen) == 0)
+            break;  /* Success */
+        
+        close(sock);
     }
     
-    /* Setup address */
-    memset(&addr, 0, sizeof(addr));
-    addr.sin_family = AF_INET;
-    addr.sin_port = htons(port);
-    memcpy(&addr.sin_addr, host->h_addr, host->h_length);
+    freeaddrinfo(result);
     
-    /* Connect */
-    if (connect(sock, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-        close(sock);
-        return -1;
-    }
+    if (rp == NULL)
+        return -1;  /* No address succeeded */
     
     /* Set non-blocking mode */
     fcntl(sock, F_SETFL, O_NONBLOCK);

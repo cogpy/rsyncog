@@ -111,7 +111,7 @@ struct atom_space *atomspace_load_binary(FILE *fp)
 {
     struct atomspace_file_header hdr;
     struct atom_record rec;
-    struct atom_space *atomspace;
+    struct atom_space *atomspace = NULL;
     struct atom *atom;
     char *name;
     size_t i;
@@ -135,18 +135,23 @@ struct atom_space *atomspace_load_binary(FILE *fp)
     /* Load atoms */
     for (i = 0; i < hdr.atom_count; i++) {
         /* Read record header */
-        if (fread(&rec, sizeof(rec), 1, fp) != 1)
-            break;
+        if (fread(&rec, sizeof(rec), 1, fp) != 1) {
+            atomspace_destroy(atomspace);
+            return NULL;
+        }
         
         /* Read name */
         name = NULL;
         if (rec.name_len > 0) {
             name = malloc(rec.name_len + 1);
-            if (!name)
-                break;
+            if (!name) {
+                atomspace_destroy(atomspace);
+                return NULL;
+            }
             if (fread(name, rec.name_len, 1, fp) != 1) {
                 free(name);
-                break;
+                atomspace_destroy(atomspace);
+                return NULL;
             }
             name[rec.name_len] = '\0';
         }
