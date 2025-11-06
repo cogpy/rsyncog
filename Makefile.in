@@ -38,7 +38,8 @@ GENFILES=configure.sh aclocal.m4 config.h.in rsync.1 rsync.1.html \
 	 rsync-ssl.1 rsync-ssl.1.html rsyncd.conf.5 rsyncd.conf.5.html \
 	 @GEN_RRSYNC@
 HEADERS=byteorder.h config.h errcode.h proto.h rsync.h ifuncs.h itypes.h inums.h \
-	lib/pool_alloc.h lib/mdigest.h lib/md-defines.h
+	lib/pool_alloc.h lib/mdigest.h lib/md-defines.h \
+	cogagent.h atomspace.h swarm_sync.h opencog_rsync.h
 LIBOBJ=lib/wildmatch.o lib/compat.o lib/snprintf.o lib/mdfour.o lib/md5.o \
 	lib/permstring.o lib/pool_alloc.o lib/sysacls.o lib/sysxattrs.o @LIBOBJS@
 zlib_OBJS=zlib/deflate.o zlib/inffast.o zlib/inflate.o zlib/inftrees.o \
@@ -49,9 +50,10 @@ OBJS2=options.o io.o compat.o hlink.o token.o uidlist.o socket.o hashtable.o \
 	usage.o fileio.o batch.o clientname.o chmod.o acls.o xattrs.o
 OBJS3=progress.o pipe.o @MD5_ASM@ @ROLL_SIMD@ @ROLL_ASM@
 DAEMON_OBJ = params.o loadparm.o clientserver.o access.o connection.o authenticate.o
+OPENCOG_OBJ = cogagent.o atomspace.o agent_zero.o swarm_sync.o opencog_rsync.o
 popt_OBJS= popt/popt.o  popt/poptconfig.o \
 	popt/popthelp.o popt/poptparse.o popt/poptint.o
-OBJS=$(OBJS1) $(OBJS2) $(OBJS3) $(DAEMON_OBJ) $(LIBOBJ) @BUILD_ZLIB@ @BUILD_POPT@
+OBJS=$(OBJS1) $(OBJS2) $(OBJS3) $(DAEMON_OBJ) $(OPENCOG_OBJ) $(LIBOBJ) @BUILD_ZLIB@ @BUILD_POPT@
 
 TLS_OBJ = tls.o syscall.o util2.o t_stub.o lib/compat.o lib/snprintf.o lib/permstring.o lib/sysxattrs.o @BUILD_POPT@
 
@@ -74,6 +76,13 @@ CHECK_OBJS=tls.o testrun.o getgroups.o getfsdev.o t_stub.o t_unsafe.o trimslash.
 # any changes to configure.sh and the main Makefile prior to a "make all".
 all: Makefile rsync$(EXEEXT) stunnel-rsyncd.conf @MAKE_RRSYNC@ @MAKE_MAN@
 .PHONY: all
+
+# OpenCog example program
+opencog_example$(EXEEXT): opencog_example.o $(OPENCOG_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ opencog_example.o $(OPENCOG_OBJ)
+
+.PHONY: opencog-example
+opencog-example: opencog_example$(EXEEXT)
 
 .PHONY: install
 install: all
