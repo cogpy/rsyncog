@@ -1,0 +1,162 @@
+In file included from ./rsync.h:1182,
+                 from ./rounding.c:20:
+./proto.h:60:34: warning: ‘struct learning_context’ declared inside parameter list will not be visible outside of this definition or declaration
+   60 | int learning_history_save(struct learning_context *ctx, const char *filename);
+      |                                  ^~~~~~~~~~~~~~~~
+./proto.h:61:34: warning: ‘struct learning_context’ declared inside parameter list will not be visible outside of this definition or declaration
+   61 | int learning_history_load(struct learning_context *ctx, const char *filename);
+      |                                  ^~~~~~~~~~~~~~~~
+./proto.h:62:29: warning: ‘struct persistence_config’ declared inside parameter list will not be visible outside of this definition or declaration
+   62 | int persistence_init(struct persistence_config *config);
+      |                             ^~~~~~~~~~~~~~~~~~
+./proto.h:64:33: warning: ‘struct learning_context’ declared inside parameter list will not be visible outside of this definition or declaration
+   64 |                          struct learning_context *learning_ctx);
+      |                                 ^~~~~~~~~~~~~~~~
+./proto.h:66:32: warning: ‘struct learning_context’ declared inside parameter list will not be visible outside of this definition or declaration
+   66 |                         struct learning_context *learning_ctx);
+      |                                ^~~~~~~~~~~~~~~~
+./proto.h:163:5: error: unknown type name ‘conflict_strategy’
+  163 |     conflict_strategy strategy);
+      |     ^~~~~~~~~~~~~~~~~
+./proto.h:164:29: warning: ‘struct dtesn_config’ declared inside parameter list will not be visible outside of this definition or declaration
+  164 | int dtesn_sched_init(struct dtesn_config *config);
+      |                             ^~~~~~~~~~~~
+./proto.h:166:32: warning: ‘struct task’ declared inside parameter list will not be visible outside of this definition or declaration
+  166 | int dtesn_sched_enqueue(struct task *task);
+      |                                ^~~~
+./proto.h:170:57: warning: ‘struct learning_context’ declared inside parameter list will not be visible outside of this definition or declaration
+  170 |                                                  struct learning_context *learning_ctx);
+      |                                                         ^~~~~~~~~~~~~~~~
+./proto.h:183:31: warning: ‘struct reconfig_event’ declared inside parameter list will not be visible outside of this definition or declaration
+  183 |                        struct reconfig_event **events,
+      |                               ^~~~~~~~~~~~~~
+./proto.h: In function ‘ggml_init’:
+./proto.h:186:46: error: invalid application of ‘sizeof’ to incomplete type ‘struct ggml_context’
+  186 |     struct ggml_context *ctx = malloc(sizeof(struct ggml_context));
+      |                                              ^~~~~~
+./proto.h:188:12: error: invalid use of undefined type ‘struct ggml_context’
+  188 |         ctx->data = malloc(size);
+      |            ^~
+./proto.h:189:12: error: invalid use of undefined type ‘struct ggml_context’
+  189 |         ctx->size = size;
+      |            ^~
+./proto.h: In function ‘ggml_free’:
+./proto.h:196:17: error: invalid use of undefined type ‘struct ggml_context’
+  196 |         free(ctx->data);
+      |                 ^~
+./proto.h: In function ‘ggml_new_tensor_1d’:
+./proto.h:203:43: error: invalid application of ‘sizeof’ to incomplete type ‘struct ggml_tensor’
+  203 |     struct ggml_tensor *t = malloc(sizeof(struct ggml_tensor));
+      |                                           ^~~~~~
+./proto.h:206:10: error: invalid use of undefined type ‘struct ggml_tensor’
+  206 |         t->data = calloc(ne0, elem_size);
+      |          ^~
+./proto.h:207:10: error: invalid use of undefined type ‘struct ggml_tensor’
+  207 |         t->ne[0] = ne0;
+      |          ^~
+./proto.h:208:10: error: invalid use of undefined type ‘struct ggml_tensor’
+  208 |         t->ne[1] = t->ne[2] = t->ne[3] = 1;
+      |          ^~
+./proto.h:208:21: error: invalid use of undefined type ‘struct ggml_tensor’
+  208 |         t->ne[1] = t->ne[2] = t->ne[3] = 1;
+      |                     ^~
+./proto.h:208:32: error: invalid use of undefined type ‘struct ggml_tensor’
+  208 |         t->ne[1] = t->ne[2] = t->ne[3] = 1;
+      |                                ^~
+./proto.h:209:10: error: invalid use of undefined type ‘struct ggml_tensor’
+  209 |         t->type = type;
+      |          ^~
+./proto.h: In function ‘ggml_new_tensor_2d’:
+./proto.h:217:43: error: invalid application of ‘sizeof’ to incomplete type ‘struct ggml_tensor’
+  217 |     struct ggml_tensor *t = malloc(sizeof(struct ggml_tensor));
+      |                                           ^~~~~~
+./proto.h:220:10: error: invalid use of undefined type ‘struct ggml_tensor’
+  220 |         t->data = calloc(ne0 * ne1, elem_size);
+      |          ^~
+./proto.h:221:10: error: invalid use of undefined type ‘struct ggml_tensor’
+  221 |         t->ne[0] = ne0;
+      |          ^~
+./proto.h:222:10: error: invalid use of undefined type ‘struct ggml_tensor’
+  222 |         t->ne[1] = ne1;
+      |          ^~
+./proto.h:223:10: error: invalid use of undefined type ‘struct ggml_tensor’
+  223 |         t->ne[2] = t->ne[3] = 1;
+      |          ^~
+./proto.h:223:21: error: invalid use of undefined type ‘struct ggml_tensor’
+  223 |         t->ne[2] = t->ne[3] = 1;
+      |                     ^~
+./proto.h:224:10: error: invalid use of undefined type ‘struct ggml_tensor’
+  224 |         t->type = type;
+      |          ^~
+./proto.h: At top level:
+./proto.h:231:2: error: #endif without #if
+  231 | #endif
+      |  ^~~~~
+./proto.h:249:31: warning: ‘struct kernel_config’ declared inside parameter list will not be visible outside of this definition or declaration
+  249 | int stage0_init_kernel(struct kernel_config *config);
+      |                               ^~~~~~~~~~~~~
+./proto.h:256:42: warning: ‘enum hgfs_edge_type’ declared inside parameter list will not be visible outside of this definition or declaration
+  256 | int hgfs_edge(void *src, void *dst, enum hgfs_edge_type type);
+      |                                          ^~~~~~~~~~~~~~
+./proto.h:257:25: warning: ‘struct cogloop_config’ declared inside parameter list will not be visible outside of this definition or declaration
+  257 | int cogloop_init(struct cogloop_config *config);
+      |                         ^~~~~~~~~~~~~~
+./proto.h:262:28: error: unknown type name ‘irq_handler’; did you mean ‘sa_handler’?
+  262 | int kirq_register(int irq, irq_handler handler);
+      |                            ^~~~~~~~~~~
+      |                            sa_handler
+./proto.h:263:32: error: unknown type name ‘syscall_handler’; did you mean ‘sa_handler’?
+  263 | int ksyscall_register(int num, syscall_handler handler);
+      |                                ^~~~~~~~~~~~~~~
+      |                                sa_handler
+./proto.h:265:29: warning: ‘struct kmutex’ declared inside parameter list will not be visible outside of this definition or declaration
+  265 | int ksync_mutex_init(struct kmutex *mutex);
+      |                             ^~~~~~
+./proto.h:266:29: warning: ‘struct kmutex’ declared inside parameter list will not be visible outside of this definition or declaration
+  266 | int ksync_mutex_lock(struct kmutex *mutex);
+      |                             ^~~~~~
+./proto.h:267:31: warning: ‘struct kmutex’ declared inside parameter list will not be visible outside of this definition or declaration
+  267 | int ksync_mutex_unlock(struct kmutex *mutex);
+      |                               ^~~~~~
+./proto.h:269:36: error: unknown type name ‘timer_callback’
+  269 | int ktimer_schedule(uint64_t nsec, timer_callback cb, void *arg);
+      |                                    ^~~~~~~~~~~~~~
+./proto.h:270:29: warning: ‘struct domain’ declared inside parameter list will not be visible outside of this definition or declaration
+  270 | int kprot_set_domain(struct domain *domain);
+      |                             ^~~~~~
+./proto.h:271:26: warning: ‘struct abi_version’ declared inside parameter list will not be visible outside of this definition or declaration
+  271 | int kabi_validate(struct abi_version *version);
+      |                          ^~~~~~~~~~~
+./proto.h:418:56: warning: ‘struct pln_inference_context’ declared inside parameter list will not be visible outside of this definition or declaration
+  418 |                                                 struct pln_inference_context *pln_ctx);
+      |                                                        ^~~~~~~~~~~~~~~~~~~~~
+./proto.h:433:47: warning: ‘struct temporal_pattern’ declared inside parameter list will not be visible outside of this definition or declaration
+  433 |                                        struct temporal_pattern **patterns,
+      |                                               ^~~~~~~~~~~~~~~~
+./proto.h:490:5: error: conflicting types for ‘main’; have ‘int(void)’
+  490 | int main(void);
+      |     ^~~~
+./proto.h:487:5: note: previous declaration of ‘main’ with type ‘int(int,  char **)’
+  487 | int main(int argc,char *argv[]);
+      |     ^~~~
+./proto.h:491:5: error: conflicting types for ‘main’; have ‘int(void)’
+  491 | int main(void);
+      |     ^~~~
+./proto.h:487:5: note: previous declaration of ‘main’ with type ‘int(int,  char **)’
+  487 | int main(int argc,char *argv[]);
+      |     ^~~~
+./proto.h:492:5: error: conflicting types for ‘main’; have ‘int(void)’
+  492 | int main(void);
+      |     ^~~~
+./proto.h:487:5: note: previous declaration of ‘main’ with type ‘int(int,  char **)’
+  487 | int main(int argc,char *argv[]);
+      |     ^~~~
+./proto.h:556:35: warning: ‘struct sync_pattern’ declared inside parameter list will not be visible outside of this definition or declaration
+  556 |                            struct sync_pattern **patterns,
+      |                                   ^~~~~~~~~~~~
+./proto.h:559:12: warning: ‘struct error_recovery_config’ declared inside parameter list will not be visible outside of this definition or declaration
+  559 |     struct error_recovery_config *config);
+      |            ^~~~~~~~~~~~~~~~~~~~~
+./proto.h:567:49: warning: ‘struct rate_limit_config’ declared inside parameter list will not be visible outside of this definition or declaration
+  567 | struct rate_limiter *rate_limiter_create(struct rate_limit_config *config);
+      |                                                 ^~~~~~~~~~~~~~~~~
