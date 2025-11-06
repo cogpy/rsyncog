@@ -1,0 +1,48 @@
+{
+  "version": 1,
+  "atom_count": 3,
+  "atoms": [
+    {
+      "handle": 3,
+      "type": 5,
+      "name": "cache",
+      "truth_value": {
+        "strength": 1.000000,
+        "confidence": 0.000000
+      },
+      "attention_value": {
+        "sti": 0,
+        "lti": 0,
+        "vlti": 0
+      }
+    },
+    {
+      "handle": 2,
+      "type": 5,
+      "name": "database",
+      "truth_value": {
+        "strength": 1.000000,
+        "confidence": 0.990000
+      },
+      "attention_value": {
+        "sti": 50,
+        "lti": 15,
+        "vlti": 0
+      }
+    },
+    {
+      "handle": 1,
+      "type": 5,
+      "name": "api_server",
+      "truth_value": {
+        "strength": 1.000000,
+        "confidence": 0.990000
+      },
+      "attention_value": {
+        "sti": 50,
+        "lti": 15,
+        "vlti": 0
+      }
+    }
+  ]
+}
