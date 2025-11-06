@@ -1,0 +1,705 @@
+/*******************************************************************************
+ * Z++ FORMAL SPECIFICATION: EXTERNAL INTEGRATIONS
+ * 
+ * RsyncOG Cognitive Architecture - Integration Contracts
+ * 
+ * This specification formalizes the contracts for external system integrations
+ * including rsync protocol, distributed communication, monitoring systems,
+ * and optional neural/tensor backends.
+ *
+ * Copyright (C) 2025 OpenCog Cognitive Architecture Project
+ * Licensed under GNU GPL v3.0
+ ******************************************************************************/
+
+/*=============================================================================
+ * SECTION 1: RSYNC PROTOCOL INTEGRATION
+ *===========================================================================*/
+
+/**
+ * RsyncDaemonConfig Schema
+ *
+ * Represents the configuration interface between cognitive system
+ * and rsync daemon.
+ *
+ * Invariants:
+ * - All modules have valid paths
+ * - Port numbers are in valid range
+ * - At least one module defined for daemon mode
+ */
+┌─ RsyncDaemonConfig ────────────────────────────────────────────────────┐
+│ daemon_name      : NAME                                                │
+│ port             : ℕ                                                   │
+│ max_connections  : ℕ                                                   │
+│ motd_file        : NAME                                                │
+│ log_file         : NAME                                                │
+│ modules          : seq ModuleConfig                                    │
+│ module_count     : ℕ                                                   │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Port validity */                                                    │
+│ 1 ≤ port ≤ 65535                                                       │
+│                                                                         │
+│ /* Module count */                                                     │
+│ module_count = #modules                                                │
+│ module_count ≥ 1                                                       │
+│                                                                         │
+│ /* Connection limits */                                                │
+│ max_connections > 0                                                    │
+│ max_connections ≤ 1000                                                 │
+│                                                                         │
+│ /* All module names are unique */                                      │
+│ ∀ m1, m2 : ModuleConfig | m1 ∈ ran modules ∧ m2 ∈ ran modules ∧        │
+│   m1 ≠ m2 ⇒ m1.name ≠ m2.name                                          │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * ModuleConfig Schema
+ *
+ * Configuration for a single rsync module with cognitive metadata.
+ */
+┌─ ModuleConfig ─────────────────────────────────────────────────────────┐
+│ name             : NAME                                                │
+│ path             : NAME                                                │
+│ comment          : NAME                                                │
+│ read_only        : 𝔹                                                   │
+│ list             : 𝔹                                                   │
+│ uid              : ℕ                                                   │
+│ gid              : ℕ                                                   │
+│ max_connections  : ℕ                                                   │
+│ /* Cognitive metadata */                                               │
+│ atomspace_handle : HANDLE                                              │
+│ truth_value      : TruthValue                                          │
+│ attention_value  : AttentionValue                                      │
+├────────────────────────────────────────────────────────────────────────┤
+│ name ≠ ∅ ∧ path ≠ ∅                                                    │
+│ max_connections ≥ 0                                                    │
+│ atomspace_handle > 0  /* Valid handle reference */                     │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * RsyncSyncRequest Schema
+ *
+ * Request from rsync client to cognitive system.
+ */
+┌─ RsyncSyncRequest ─────────────────────────────────────────────────────┐
+│ request_id       : HANDLE                                              │
+│ module_name      : NAME                                                │
+│ client_host      : NAME                                                │
+│ client_user      : NAME                                                │
+│ timestamp        : TIMESTAMP                                           │
+│ flags            : ℕ  /* rsync protocol flags */                       │
+├────────────────────────────────────────────────────────────────────────┤
+│ request_id > 0                                                         │
+│ module_name ≠ ∅                                                        │
+│ timestamp > 0                                                          │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * ProcessRsyncRequest Operation
+ *
+ * Processes incoming rsync request with cognitive awareness.
+ *
+ * Pre-conditions:
+ * - Module exists in AtomSpace
+ * - System is running
+ * - Request is valid
+ *
+ * Post-conditions:
+ * - Module atom accessed (count++)
+ * - PLN prediction made
+ * - Sync operation logged
+ * - Response prepared
+ */
+┌─ ProcessRsyncRequest ──────────────────────────────────────────────────┐
+│ ΞSystemState                                                           │
+│ request? : RsyncSyncRequest                                            │
+│ allow_sync! : 𝔹                                                        │
+│ predicted_success! : TruthValue                                        │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ running                                                                │
+│ ∃ module_atom : Atom | module_atom ∈ ran atomspace.atom_table ∧        │
+│   module_atom.atom_type = atom_module ∧                                │
+│   module_atom.name = request?.module_name                              │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ /* Find module and host atoms */                                       │
+│ ∃ module_atom : ModuleAtom |                                           │
+│   module_atom ∈ ran atomspace.atom_table ∧                             │
+│   module_atom.name = request?.module_name ∧                            │
+│                                                                         │
+│   /* PLN predicts success */                                           │
+│   predicted_success! = pln_predict_sync(module_atom,                   │
+│                                        request?.client_host) ∧          │
+│                                                                         │
+│   /* Allow sync based on trust and prediction */                       │
+│   allow_sync! ⇔                                                        │
+│     module_atom.tv.strength ≥ 0.5 ∧                                    │
+│     predicted_success!.strength ≥ 0.3 ∧                                │
+│     module_atom.av.sti ≥ 0                                             │
+│                                                                         │
+│ /* Log request to monitor */                                           │
+│ ∃ msg : CogMessage |                                                   │
+│   msg.msg_type = status ∧                                              │
+│   msg.sender_id = agent_zero.agent_id ∧                                │
+│   msg.receiver_id = (agent_registry(cog_agent_monitor)).agent_id       │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 2: DISTRIBUTED COMMUNICATION PROTOCOL
+ *===========================================================================*/
+
+/**
+ * NetworkMessage Schema
+ *
+ * Low-level network message for distributed AtomSpace sync.
+ *
+ * Message Types:
+ * - ATOM_CREATE: New atom creation
+ * - ATOM_UPDATE: Atom modification
+ * - ATOM_DELETE: Atom removal
+ * - LINK_CREATE: New link creation
+ * - LINK_UPDATE: Link modification
+ * - SYNC_REQUEST: Request full/incremental sync
+ * - SYNC_RESPONSE: Response to sync request
+ * - HEARTBEAT: Keep-alive message
+ */
+┌─ NetworkMessage ───────────────────────────────────────────────────────┐
+│ msg_id           : HANDLE                                              │
+│ msg_type         : {atom_create, atom_update, atom_delete,             │
+│                     link_create, link_update,                          │
+│                     sync_request, sync_response, heartbeat}            │
+│ source_node      : HANDLE                                              │
+│ dest_node        : HANDLE                                              │
+│ timestamp        : TIMESTAMP                                           │
+│ sequence_num     : ℕ                                                   │
+│ payload_size     : ℕ                                                   │
+│ payload          : seq ℤ  /* Binary data */                            │
+│ checksum         : ℕ                                                   │
+├────────────────────────────────────────────────────────────────────────┤
+│ msg_id > 0                                                             │
+│ source_node ≠ dest_node                                                │
+│ payload_size = #payload                                                │
+│ payload_size ≤ 1048576  /* Max 1MB per message */                      │
+│ checksum = crc32(payload)                                              │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * AtomSyncPayload Schema
+ *
+ * Payload for atom synchronization messages.
+ */
+┌─ AtomSyncPayload ──────────────────────────────────────────────────────┐
+│ atom_handle      : HANDLE                                              │
+│ atom_type        : ATOM_TYPE                                           │
+│ atom_name        : NAME                                                │
+│ truth_value      : TruthValue                                          │
+│ attention_value  : AttentionValue                                      │
+│ created          : TIMESTAMP                                           │
+│ last_accessed    : TIMESTAMP                                           │
+│ metadata_size    : ℕ                                                   │
+│ metadata         : seq (ℤ × ℤ)  /* Key-value pairs */                  │
+├────────────────────────────────────────────────────────────────────────┤
+│ atom_handle > 0                                                        │
+│ created ≤ last_accessed                                                │
+│ metadata_size = #metadata                                              │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * SendAtomToNode Operation
+ *
+ * Sends an atom to a remote distributed node.
+ *
+ * Pre-conditions:
+ * - Atom exists in local AtomSpace
+ * - Node exists and is connected
+ *
+ * Post-conditions:
+ * - Network message created and sent
+ * - Send counter incremented
+ * - Transmission logged
+ */
+┌─ SendAtomToNode ───────────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ atom_handle? : HANDLE                                                  │
+│ node_id? : HANDLE                                                      │
+│ current_time? : TIMESTAMP                                              │
+│ success! : 𝔹                                                           │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ atom_handle? ∈ dom atomspace.atom_table                                │
+│ ∃ node : AtomSpaceNode | node ∈ ran distributed_as.nodes ∧             │
+│   node.node_id = node_id? ∧                                            │
+│   node.connected = true                                                │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ ∃ atom : Atom | atom = atomspace.atom_table(atom_handle?) ∧            │
+│   ∃ payload : AtomSyncPayload |                                        │
+│     payload.atom_handle = atom.handle ∧                                │
+│     payload.atom_type = atom.atom_type ∧                               │
+│     payload.atom_name = atom.name ∧                                    │
+│     payload.truth_value = atom.tv ∧                                    │
+│     payload.attention_value = atom.av ∧                                │
+│     payload.created = atom.created ∧                                   │
+│     payload.last_accessed = atom.last_accessed ∧                       │
+│                                                                         │
+│     ∃ msg : NetworkMessage |                                           │
+│       msg.msg_type = atom_update ∧                                     │
+│       msg.source_node = 0 /* local */ ∧                                │
+│       msg.dest_node = node_id? ∧                                       │
+│       msg.timestamp = current_time? ∧                                  │
+│       msg.payload = serialize(payload) ∧                               │
+│       network_send(msg)                                                │
+│                                                                         │
+│ /* Update statistics */                                                │
+│ distributed_as'.atoms_sent = distributed_as.atoms_sent + 1             │
+│ success! = true                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * ReceiveAtomFromNode Operation
+ *
+ * Receives and integrates an atom from remote node.
+ *
+ * Pre-conditions:
+ * - Valid network message received
+ * - Source node is known
+ *
+ * Post-conditions:
+ * - Atom created or updated in local AtomSpace
+ * - Conflicts resolved if necessary
+ * - Receive counter incremented
+ */
+┌─ ReceiveAtomFromNode ──────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ msg? : NetworkMessage                                                  │
+│ conflict_detected! : 𝔹                                                 │
+│ atom_handle! : HANDLE                                                  │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ msg?.msg_type ∈ {atom_create, atom_update}                             │
+│ msg?.source_node ∈ {n.node_id | n : AtomSpaceNode,                     │
+│                      n ∈ ran distributed_as.nodes}                     │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ ∃ payload : AtomSyncPayload |                                          │
+│   payload = deserialize(msg?.payload) ∧                                │
+│                                                                         │
+│   /* Check for conflict */                                             │
+│   conflict_detected! ⇔                                                 │
+│     payload.atom_handle ∈ dom atomspace.atom_table ∧                   │
+│     atomspace.atom_table(payload.atom_handle).last_accessed >          │
+│       payload.last_accessed ∧                                          │
+│     atomspace.atom_table(payload.atom_handle).tv ≠                     │
+│       payload.truth_value                                              │
+│                                                                         │
+│ /* Resolve conflict or integrate atom */                               │
+│ ∃ integrated_atom : Atom |                                             │
+│   (¬ conflict_detected! ⇒                                              │
+│     /* No conflict - direct integration */                             │
+│     integrated_atom.handle = payload.atom_handle ∧                     │
+│     integrated_atom.tv = payload.truth_value ∧                         │
+│     integrated_atom.av = payload.attention_value) ∧                    │
+│                                                                         │
+│   (conflict_detected! ⇒                                                │
+│     /* Conflict - apply resolution strategy */                         │
+│     resolve_atom_conflict(                                             │
+│       distributed_as.conflict_resolution,                              │
+│       atomspace.atom_table(payload.atom_handle),                       │
+│       payload,                                                         │
+│       integrated_atom)) ∧                                              │
+│                                                                         │
+│   integrated_atom ∈ ran atomspace'.atom_table                          │
+│                                                                         │
+│ atom_handle! = integrated_atom.handle                                  │
+│                                                                         │
+│ /* Update statistics */                                                │
+│ distributed_as'.atoms_received =                                       │
+│   distributed_as.atoms_received + 1                                    │
+│ conflict_detected! ⇒                                                   │
+│   distributed_as'.conflicts_resolved =                                 │
+│     distributed_as.conflicts_resolved + 1                              │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 3: MONITORING AND METRICS INTEGRATION
+ *===========================================================================*/
+
+/**
+ * PrometheusMetrics Schema
+ *
+ * Prometheus-compatible metrics for monitoring.
+ */
+┌─ PrometheusMetrics ────────────────────────────────────────────────────┐
+│ /* Counter metrics */                                                  │
+│ total_sync_operations          : ℕ                                     │
+│ successful_sync_operations     : ℕ                                     │
+│ failed_sync_operations         : ℕ                                     │
+│ total_bytes_synced             : ℕ                                     │
+│ pln_inferences_performed       : ℕ                                     │
+│ patterns_discovered            : ℕ                                     │
+│ reconfigurations_triggered     : ℕ                                     │
+│                                                                         │
+│ /* Gauge metrics */                                                    │
+│ atomspace_atom_count           : ℕ                                     │
+│ atomspace_link_count           : ℕ                                     │
+│ active_swarm_formations        : ℕ                                     │
+│ active_agents                  : ℕ                                     │
+│ distributed_nodes_connected    : ℕ                                     │
+│                                                                         │
+│ /* Histogram metrics */                                                │
+│ sync_duration_ms_buckets       : seq (ℕ × ℕ)  /* (bucket, count) */    │
+│ atom_tv_strength_buckets       : seq (ℝ × ℕ)  /* (bucket, count) */    │
+│                                                                         │
+│ /* Summary metrics */                                                  │
+│ success_rate                   : ℝ                                     │
+│ avg_sync_duration_ms           : ℕ                                     │
+│ prediction_accuracy            : ℝ                                     │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Counter consistency */                                              │
+│ successful_sync_operations + failed_sync_operations =                  │
+│   total_sync_operations                                                │
+│                                                                         │
+│ /* Rate validity */                                                    │
+│ 0.0 ≤ success_rate ≤ 1.0                                               │
+│ 0.0 ≤ prediction_accuracy ≤ 1.0                                        │
+│                                                                         │
+│ /* Non-negative metrics */                                             │
+│ ∀ metric : ℕ | metric ≥ 0                                              │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * ExportPrometheusMetrics Operation
+ *
+ * Exports current system state as Prometheus metrics.
+ *
+ * Pre-conditions:
+ * - System is initialized
+ *
+ * Post-conditions:
+ * - Metrics structure populated from system state
+ * - Metrics available at /metrics endpoint
+ */
+┌─ ExportPrometheusMetrics ──────────────────────────────────────────────┐
+│ ΞSystemState                                                           │
+│ metrics! : PrometheusMetrics                                           │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ initialized                                                            │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ /* Counter metrics from production monitor */                          │
+│ metrics!.total_sync_operations =                                       │
+│   production_monitor.total_sync_ops                                    │
+│ metrics!.successful_sync_operations =                                  │
+│   production_monitor.successful_sync_ops                               │
+│ metrics!.failed_sync_operations =                                      │
+│   production_monitor.failed_sync_ops                                   │
+│ metrics!.total_bytes_synced =                                          │
+│   production_monitor.total_bytes_synced                                │
+│                                                                         │
+│ /* Counter metrics from PLN */                                         │
+│ metrics!.pln_inferences_performed =                                    │
+│   pln_context.inferences_performed                                     │
+│ metrics!.patterns_discovered =                                         │
+│   learning_context.stats.patterns_learned                              │
+│ metrics!.reconfigurations_triggered =                                  │
+│   reconfig_context.reconfig_count                                      │
+│                                                                         │
+│ /* Gauge metrics from AtomSpace */                                     │
+│ metrics!.atomspace_atom_count = atomspace.atom_count                   │
+│ metrics!.atomspace_link_count = atomspace.link_count                   │
+│                                                                         │
+│ /* Gauge metrics from swarms and agents */                             │
+│ metrics!.active_swarm_formations =                                     │
+│   #{sf : SwarmFormation | sf ∈ ran swarm_formations ∧                  │
+│      sf.state ∈ {swarm_active, swarm_coordinating}}                    │
+│ metrics!.active_agents =                                               │
+│   #{a : CogAgent | a ∈ ran agents ∧                                    │
+│      a.state ∈ {cog_state_active, cog_state_coordinating}}             │
+│ metrics!.distributed_nodes_connected =                                 │
+│   #{n : AtomSpaceNode | n ∈ ran distributed_as.nodes ∧                 │
+│      n.connected = true}                                               │
+│                                                                         │
+│ /* Summary metrics */                                                  │
+│ metrics!.success_rate = production_monitor.success_rate                │
+│ metrics!.avg_sync_duration_ms =                                        │
+│   production_monitor.avg_sync_duration                                 │
+│ metrics!.prediction_accuracy =                                         │
+│   learning_context.stats.prediction_accuracy                           │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 4: AUTHENTICATION AND AUTHORIZATION INTEGRATION
+ *===========================================================================*/
+
+/**
+ * AuthenticationRequest Schema
+ *
+ * Request to authenticate a client connection.
+ */
+┌─ AuthenticationRequest ────────────────────────────────────────────────┐
+│ request_id       : HANDLE                                              │
+│ username         : NAME                                                │
+│ password_hash    : seq ℤ  /* Hashed password */                        │
+│ client_host      : NAME                                                │
+│ module_name      : NAME                                                │
+│ timestamp        : TIMESTAMP                                           │
+├────────────────────────────────────────────────────────────────────────┤
+│ username ≠ ∅                                                           │
+│ #password_hash = 32  /* SHA256 hash */                                 │
+│ timestamp > 0                                                          │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * AuthenticationResponse Schema
+ *
+ * Response to authentication request with trust level.
+ */
+┌─ AuthenticationResponse ───────────────────────────────────────────────┐
+│ request_id       : HANDLE                                              │
+│ authenticated    : 𝔹                                                   │
+│ trust_level      : TruthValue                                          │
+│ session_token    : HANDLE                                              │
+│ expires_at       : TIMESTAMP                                           │
+│ reason           : NAME  /* If failed */                               │
+├────────────────────────────────────────────────────────────────────────┤
+│ authenticated ⇒ session_token > 0                                      │
+│ authenticated ⇒ expires_at > timestamp                                 │
+│ ¬ authenticated ⇒ reason ≠ ∅                                           │
+│ 0.0 ≤ trust_level.strength ≤ 1.0                                       │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * AuthenticateClient Operation
+ *
+ * Authenticates a client using cognitive trust assessment.
+ *
+ * Pre-conditions:
+ * - Authentication request is valid
+ * - Module exists in AtomSpace
+ * - Agent Auth is operational
+ *
+ * Post-conditions:
+ * - Authentication decision made
+ * - Trust level calculated based on history
+ * - Auth trust link may be created/updated
+ * - Session token generated if successful
+ */
+┌─ AuthenticateClient ───────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ auth_req? : AuthenticationRequest                                      │
+│ auth_resp! : AuthenticationResponse                                    │
+│ current_time? : TIMESTAMP                                              │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ ∃ agent_auth : CogAgent |                                              │
+│   agent_auth = agent_registry(cog_agent_auth) ∧                        │
+│   agent_auth.state ∈ {cog_state_idle, cog_state_active}                │
+│                                                                         │
+│ ∃ module_atom : Atom |                                                 │
+│   module_atom ∈ ran atomspace.atom_table ∧                             │
+│   module_atom.atom_type = atom_module ∧                                │
+│   module_atom.name = auth_req?.module_name                             │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ /* Verify credentials (external auth system) */                        │
+│ ∃ credentials_valid : 𝔹 |                                              │
+│   credentials_valid = verify_credentials(auth_req?.username,           │
+│                                         auth_req?.password_hash) ∧     │
+│                                                                         │
+│   /* Calculate trust level from history */                             │
+│   ∃ trust : TruthValue |                                               │
+│     trust = calculate_trust_from_history(                              │
+│       learning_context,                                                │
+│       auth_req?.username,                                              │
+│       auth_req?.client_host,                                           │
+│       auth_req?.module_name) ∧                                         │
+│                                                                         │
+│     /* Authentication decision */                                      │
+│     auth_resp!.authenticated ⇔                                         │
+│       credentials_valid ∧                                              │
+│       trust.strength ≥ 0.5 ∧                                           │
+│       module_atom.av.sti ≥ 0 ∧                                         │
+│                                                                         │
+│     auth_resp!.trust_level = trust ∧                                   │
+│     auth_resp!.request_id = auth_req?.request_id ∧                     │
+│                                                                         │
+│     (auth_resp!.authenticated ⇒                                        │
+│       auth_resp!.session_token = generate_token() ∧                    │
+│       auth_resp!.expires_at = current_time? + 3600 ∧  /* 1 hour */     │
+│       /* Create/update auth trust link */                              │
+│       ∃ link : AuthTrustLink |                                         │
+│         link.tv = trust ∧                                              │
+│         link ∈ ran atomspace'.link_table) ∧                            │
+│                                                                         │
+│     (¬ auth_resp!.authenticated ⇒                                      │
+│       auth_resp!.reason = "Insufficient trust level")                  │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 5: OPTIONAL NEURAL/TENSOR BACKEND INTEGRATION
+ *===========================================================================*/
+
+/**
+ * GGMLEmbeddingContext Schema
+ *
+ * Context for GGML tensor-based atom embeddings (optional).
+ *
+ * Note: This is a stub specification. Full implementation requires
+ * linking with GGML library.
+ */
+┌─ GGMLEmbeddingContext ─────────────────────────────────────────────────┐
+│ atomspace          : AtomSpace                                         │
+│ embedding_dim      : ℕ                                                 │
+│ embeddings         : HANDLE ⇸ seq ℝ                                    │
+│ similarity_cache   : (HANDLE × HANDLE) ⇸ ℝ                             │
+│ last_update        : TIMESTAMP                                         │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Embedding dimension validity */                                     │
+│ embedding_dim ∈ {64, 128, 256, 512, 1024}                              │
+│                                                                         │
+│ /* All embeddings have correct dimension */                            │
+│ ∀ h : HANDLE | h ∈ dom embeddings ⇒                                    │
+│   #embeddings(h) = embedding_dim                                       │
+│                                                                         │
+│ /* Embeddings normalized */                                            │
+│ ∀ h : HANDLE | h ∈ dom embeddings ⇒                                    │
+│   vector_norm(embeddings(h)) = 1.0                                     │
+│                                                                         │
+│ /* Similarity is symmetric */                                          │
+│ ∀ h1, h2 : HANDLE | (h1, h2) ∈ dom similarity_cache ⇒                  │
+│   similarity_cache(h1, h2) = similarity_cache(h2, h1)                  │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * LlamaPatternContext Schema
+ *
+ * Context for llama.cpp neural pattern recognition (optional).
+ *
+ * Note: This is a stub specification. Full implementation requires
+ * linking with llama.cpp library.
+ */
+┌─ LlamaPatternContext ──────────────────────────────────────────────────┐
+│ atomspace          : AtomSpace                                         │
+│ learning_ctx       : LearningContext                                   │
+│ model_path         : NAME                                              │
+│ model_loaded       : 𝔹                                                 │
+│ predictions_made   : ℕ                                                 │
+│ training_epochs    : ℕ                                                 │
+│ model_accuracy     : ℝ                                                 │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Model file exists if loaded */                                      │
+│ model_loaded ⇒ file_exists(model_path)                                 │
+│                                                                         │
+│ /* Accuracy bounds */                                                  │
+│ 0.0 ≤ model_accuracy ≤ 1.0                                             │
+│                                                                         │
+│ /* Non-negative counters */                                            │
+│ predictions_made ≥ 0                                                   │
+│ training_epochs ≥ 0                                                    │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 6: CONFIGURATION FILE GENERATION CONTRACT
+ *===========================================================================*/
+
+/**
+ * GeneratedConfig Schema
+ *
+ * Represents a generated rsyncd.conf file with cognitive metadata.
+ *
+ * Invariants:
+ * - All modules in config exist in AtomSpace
+ * - All swarms in config are active
+ * - Cognitive metadata is embedded as comments
+ */
+┌─ GeneratedConfig ──────────────────────────────────────────────────────┐
+│ file_path        : NAME                                                │
+│ generation_time  : TIMESTAMP                                           │
+│ atomspace_ref    : AtomSpace                                           │
+│ global_settings  : seq (NAME × NAME)  /* Key-value pairs */            │
+│ modules          : seq ModuleConfig                                    │
+│ swarms           : seq SwarmFormation                                  │
+│ metadata_embedded: 𝔹                                                   │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* All modules exist in AtomSpace */                                   │
+│ ∀ m : ModuleConfig | m ∈ ran modules ⇒                                 │
+│   m.atomspace_handle ∈ dom atomspace_ref.atom_table                    │
+│                                                                         │
+│ /* All swarms are active */                                            │
+│ ∀ s : SwarmFormation | s ∈ ran swarms ⇒                                │
+│   s.state ∈ {swarm_active, swarm_coordinating}                         │
+│                                                                         │
+│ /* Metadata must be embedded */                                        │
+│ metadata_embedded = true                                               │
+│                                                                         │
+│ /* File path is valid */                                               │
+│ file_path ≠ ∅                                                          │
+│ generation_time > 0                                                    │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * ConfigFileContract Operation
+ *
+ * Contract specification for config file generation.
+ * Ensures generated configuration is complete and consistent.
+ *
+ * Pre-conditions:
+ * - AtomSpace has at least one module
+ * - Agent Zero is operational
+ *
+ * Post-conditions:
+ * - Config file contains all modules with TV/AV
+ * - Config file contains all active swarms
+ * - Config file is valid rsync daemon format
+ * - Metadata is embedded as structured comments
+ */
+┌─ ConfigFileContract ───────────────────────────────────────────────────┐
+│ ΞSystemState                                                           │
+│ output_path? : NAME                                                    │
+│ config! : GeneratedConfig                                              │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ ∃ module : Atom | module ∈ ran atomspace.atom_table ∧                  │
+│   module.atom_type = atom_module                                       │
+│ agent_zero.state ∈ {cog_state_idle, cog_state_active}                  │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ config!.file_path = output_path?                                       │
+│ config!.atomspace_ref = atomspace                                      │
+│ config!.metadata_embedded = true                                       │
+│                                                                         │
+│ /* All module atoms become module configs */                           │
+│ ∀ a : ModuleAtom | a ∈ ran atomspace.atom_table ⇒                      │
+│   ∃ mc : ModuleConfig | mc ∈ ran config!.modules ∧                     │
+│     mc.name = a.name ∧                                                 │
+│     mc.path = a.module_path ∧                                          │
+│     mc.read_only = a.read_only ∧                                       │
+│     mc.atomspace_handle = a.handle ∧                                   │
+│     mc.truth_value = a.tv ∧                                            │
+│     mc.attention_value = a.av                                          │
+│                                                                         │
+│ /* All active swarms included */                                       │
+│ ∀ sf : SwarmFormation | sf ∈ ran swarm_formations ∧                    │
+│                        sf.state = swarm_active ⇒                       │
+│   sf ∈ ran config!.swarms                                              │
+│                                                                         │
+│ /* Config is valid rsync format */                                     │
+│ valid_rsync_config(config!.file_path)                                  │
+│                                                                         │
+│ /* Metadata embedded in comments */                                    │
+│ ∀ mc : ModuleConfig | mc ∈ ran config!.modules ⇒                       │
+│   config_has_metadata_comment(config!.file_path,                       │
+│                               mc.name,                                 │
+│                               mc.truth_value,                          │
+│                               mc.attention_value)                      │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*******************************************************************************
+ * END OF EXTERNAL INTEGRATIONS SPECIFICATION
+ *
+ * This specification defines all external integration contracts for the
+ * RsyncOG cognitive architecture. These contracts ensure correct interaction
+ * with rsync protocol, distributed systems, monitoring tools, and optional
+ * neural/tensor backends.
+ ******************************************************************************/
