@@ -1,0 +1,12 @@
+In file included from ./rsync.h:1182,
+                 from ./rounding.c:20:
+./proto.h:288:5: error: conflicting types for ‘main’; have ‘int(void)’
+  288 | int main(void);
+      |     ^~~~
+./proto.h:285:5: note: previous declaration of ‘main’ with type ‘int(int,  char **)’
+  285 | int main(int argc,char *argv[]);
+      |     ^~~~
+./rounding.c: In function ‘main’:
+./rounding.c:35:20: warning: variable ‘test_array’ set but not used [-Wunused-but-set-variable]
+   35 |         static int test_array[1 - 2 * (ACTUAL_SIZE != EXPECTED_SIZE)];
+      |                    ^~~~~~~~~~
