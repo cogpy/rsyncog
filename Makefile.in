@@ -42,7 +42,7 @@ HEADERS=byteorder.h config.h errcode.h proto.h rsync.h ifuncs.h itypes.h inums.h
 	cogagent.h atomspace.h swarm_sync.h opencog_rsync.h agent_zero.h \
 	pln_inference.h learning_module.h dynamic_reconfig.h \
 	distributed_atomspace.h ggml_hypergraph.h llama_pattern.h \
-	atomspace_persistence.h production_monitor.h
+	atomspace_persistence.h production_monitor.h echo_kern.h
 LIBOBJ=lib/wildmatch.o lib/compat.o lib/snprintf.o lib/mdfour.o lib/md5.o \
 	lib/permstring.o lib/pool_alloc.o lib/sysacls.o lib/sysxattrs.o @LIBOBJS@
 zlib_OBJS=zlib/deflate.o zlib/inffast.o zlib/inflate.o zlib/inftrees.o \
@@ -56,7 +56,7 @@ DAEMON_OBJ = params.o loadparm.o clientserver.o access.o connection.o authentica
 OPENCOG_OBJ = cogagent.o atomspace.o agent_zero.o swarm_sync.o opencog_rsync.o \
 	pln_inference.o learning_module.o dynamic_reconfig.o \
 	distributed_atomspace.o ggml_hypergraph.o llama_pattern.o \
-	atomspace_persistence.o production_monitor.o
+	atomspace_persistence.o production_monitor.o echo_kern.o
 popt_OBJS= popt/popt.o  popt/poptconfig.o \
 	popt/popthelp.o popt/poptparse.o popt/poptint.o
 OBJS=$(OBJS1) $(OBJS2) $(OBJS3) $(DAEMON_OBJ) $(OPENCOG_OBJ) $(LIBOBJ) @BUILD_ZLIB@ @BUILD_POPT@
@@ -95,6 +95,10 @@ opencog_future_demo$(EXEEXT): opencog_future_demo.o $(OPENCOG_OBJ)
 opencog_production_demo$(EXEEXT): opencog_production_demo.o $(OPENCOG_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ opencog_production_demo.o $(OPENCOG_OBJ) -lm
 
+# Echo.Kern cognitive kernel demo
+echo_kern_demo$(EXEEXT): echo_kern_demo.o echo_kern.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ echo_kern_demo.o echo_kern.o -lm
+
 .PHONY: opencog-example
 opencog-example: opencog_example$(EXEEXT)
 
@@ -103,6 +107,9 @@ opencog-future-demo: opencog_future_demo$(EXEEXT)
 
 .PHONY: opencog-production-demo
 opencog-production-demo: opencog_production_demo$(EXEEXT)
+
+.PHONY: echo-kern-demo
+echo-kern-demo: echo_kern_demo$(EXEEXT)
 
 .PHONY: install
 install: all
