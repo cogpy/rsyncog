@@ -39,7 +39,9 @@ GENFILES=configure.sh aclocal.m4 config.h.in rsync.1 rsync.1.html \
 	 @GEN_RRSYNC@
 HEADERS=byteorder.h config.h errcode.h proto.h rsync.h ifuncs.h itypes.h inums.h \
 	lib/pool_alloc.h lib/mdigest.h lib/md-defines.h \
-	cogagent.h atomspace.h swarm_sync.h opencog_rsync.h
+	cogagent.h atomspace.h swarm_sync.h opencog_rsync.h agent_zero.h \
+	pln_inference.h learning_module.h dynamic_reconfig.h \
+	distributed_atomspace.h ggml_hypergraph.h llama_pattern.h
 LIBOBJ=lib/wildmatch.o lib/compat.o lib/snprintf.o lib/mdfour.o lib/md5.o \
 	lib/permstring.o lib/pool_alloc.o lib/sysacls.o lib/sysxattrs.o @LIBOBJS@
 zlib_OBJS=zlib/deflate.o zlib/inffast.o zlib/inflate.o zlib/inftrees.o \
@@ -50,7 +52,9 @@ OBJS2=options.o io.o compat.o hlink.o token.o uidlist.o socket.o hashtable.o \
 	usage.o fileio.o batch.o clientname.o chmod.o acls.o xattrs.o
 OBJS3=progress.o pipe.o @MD5_ASM@ @ROLL_SIMD@ @ROLL_ASM@
 DAEMON_OBJ = params.o loadparm.o clientserver.o access.o connection.o authenticate.o
-OPENCOG_OBJ = cogagent.o atomspace.o agent_zero.o swarm_sync.o opencog_rsync.o
+OPENCOG_OBJ = cogagent.o atomspace.o agent_zero.o swarm_sync.o opencog_rsync.o \
+	pln_inference.o learning_module.o dynamic_reconfig.o \
+	distributed_atomspace.o ggml_hypergraph.o llama_pattern.o
 popt_OBJS= popt/popt.o  popt/poptconfig.o \
 	popt/popthelp.o popt/poptparse.o popt/poptint.o
 OBJS=$(OBJS1) $(OBJS2) $(OBJS3) $(DAEMON_OBJ) $(OPENCOG_OBJ) $(LIBOBJ) @BUILD_ZLIB@ @BUILD_POPT@
@@ -79,10 +83,17 @@ all: Makefile rsync$(EXEEXT) stunnel-rsyncd.conf @MAKE_RRSYNC@ @MAKE_MAN@
 
 # OpenCog example program
 opencog_example$(EXEEXT): opencog_example.o $(OPENCOG_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ opencog_example.o $(OPENCOG_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ opencog_example.o $(OPENCOG_OBJ) -lm
+
+# OpenCog future enhancements demo
+opencog_future_demo$(EXEEXT): opencog_future_demo.o $(OPENCOG_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ opencog_future_demo.o $(OPENCOG_OBJ) -lm
 
 .PHONY: opencog-example
 opencog-example: opencog_example$(EXEEXT)
+
+.PHONY: opencog-future-demo
+opencog-future-demo: opencog_future_demo$(EXEEXT)
 
 .PHONY: install
 install: all
