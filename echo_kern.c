@@ -39,7 +39,7 @@ struct ggml_tensor {
 };
 
 /* Stub GGML functions */
-static struct ggml_context *ggml_init(size_t size) {
+struct ggml_context *ggml_init(size_t size) {
     struct ggml_context *ctx = malloc(sizeof(struct ggml_context));
     if (ctx) {
         ctx->data = malloc(size);
@@ -48,14 +48,14 @@ static struct ggml_context *ggml_init(size_t size) {
     return ctx;
 }
 
-static void ggml_free(struct ggml_context *ctx) {
+void ggml_free(struct ggml_context *ctx) {
     if (ctx) {
         free(ctx->data);
         free(ctx);
     }
 }
 
-static struct ggml_tensor *ggml_new_tensor_1d(struct ggml_context *ctx,
+struct ggml_tensor *ggml_new_tensor_1d(struct ggml_context *ctx,
                                               int type, size_t ne0) {
     struct ggml_tensor *t = malloc(sizeof(struct ggml_tensor));
     if (t) {
@@ -65,10 +65,11 @@ static struct ggml_tensor *ggml_new_tensor_1d(struct ggml_context *ctx,
         t->ne[1] = t->ne[2] = t->ne[3] = 1;
         t->type = type;
     }
+    (void)ctx;  /* Unused in stub */
     return t;
 }
 
-static struct ggml_tensor *ggml_new_tensor_2d(struct ggml_context *ctx,
+struct ggml_tensor *ggml_new_tensor_2d(struct ggml_context *ctx,
                                               int type, size_t ne0, size_t ne1) {
     struct ggml_tensor *t = malloc(sizeof(struct ggml_tensor));
     if (t) {
@@ -79,6 +80,7 @@ static struct ggml_tensor *ggml_new_tensor_2d(struct ggml_context *ctx,
         t->ne[2] = t->ne[3] = 1;
         t->type = type;
     }
+    (void)ctx;  /* Unused in stub */
     return t;
 }
 
@@ -118,6 +120,17 @@ void kern_log(const char *fmt, ...)
     va_end(args);
     
     printf("[KERN] %s\n", buf);
+}
+
+/**
+ * ggml_tensor_data - Get tensor data pointer
+ * @tensor: GGML tensor
+ *
+ * Returns: Data pointer
+ */
+void *ggml_tensor_data(struct ggml_tensor *tensor)
+{
+    return tensor ? tensor->data : NULL;
 }
 
 /* ============================================================================
@@ -287,11 +300,7 @@ void stage0_shutdown_kernel(void)
             free(t);
         }
         
-        /* Free GGML context (if separate from global) */
-        if (g_kernel->sched->ggml_ctx &&
-            g_kernel->sched->ggml_ctx != g_kernel->ggml_ctx) {
-            ggml_free(g_kernel->sched->ggml_ctx);
-        }
+        /* Note: GGML tensors are freed with the GGML context, not individually */
         
         free(g_kernel->sched);
         g_kernel->sched = NULL;
@@ -303,9 +312,11 @@ void stage0_shutdown_kernel(void)
         struct hgfs_node *n, *next_n;
         for (n = g_kernel->hgfs->nodes; n; n = next_n) {
             next_n = n->next;
-            if (n->data && n->data != n->tensor->data)
+            /* Only free data if it's not part of a tensor */
+            if (n->data && !n->tensor)
                 free(n->data);
-            if (n->tensor)
+            /* Tensors are freed with GGML context, not individually */
+            if (n->tensor && !g_kernel->config.enable_ggml)
                 free(n->tensor);
             free(n);
         }
@@ -622,33 +633,6 @@ int hgfs_edge(void *src, void *dst, enum hgfs_edge_type type)
 /* ============================================================================
  * Stub Implementations (To be completed in future phases)
  * ============================================================================ */
-
-int dtesn_sched_init(struct dtesn_config *config)
-{
-    kern_log("dtesn_sched_init: Not yet implemented");
-    (void)config;
-    return -1;
-}
-
-int dtesn_sched_tick(void)
-{
-    kern_log("dtesn_sched_tick: Not yet implemented");
-    return -1;
-}
-
-int dtesn_sched_enqueue(struct task *task)
-{
-    kern_log("dtesn_sched_enqueue: Not yet implemented");
-    (void)task;
-    return -1;
-}
-
-int dtesn_mem_init_regions(uint32_t max_depth)
-{
-    kern_log("dtesn_mem_init_regions: Not yet implemented");
-    (void)max_depth;
-    return -1;
-}
 
 int cogloop_init(struct cogloop_config *config)
 {

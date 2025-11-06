@@ -409,5 +409,6 @@ int kabi_validate(struct abi_version *version);
 /* Utility functions */
 uint64_t kern_get_time_ns(void);  /* Get current time in nanoseconds */
 void kern_log(const char *fmt, ...);  /* Kernel logging */
+void *ggml_tensor_data(struct ggml_tensor *tensor);  /* Get tensor data pointer */
 
 #endif /* ECHO_KERN_H */

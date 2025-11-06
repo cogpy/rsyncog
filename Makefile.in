@@ -96,8 +96,8 @@ opencog_production_demo$(EXEEXT): opencog_production_demo.o $(OPENCOG_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ opencog_production_demo.o $(OPENCOG_OBJ) -lm
 
 # Echo.Kern cognitive kernel demo
-echo_kern_demo$(EXEEXT): echo_kern_demo.o echo_kern.o
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ echo_kern_demo.o echo_kern.o -lm
+echo_kern_demo$(EXEEXT): echo_kern_demo.o echo_kern.o dtesn_scheduler.o
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ echo_kern_demo.o echo_kern.o dtesn_scheduler.o -lm
 
 .PHONY: opencog-example
 opencog-example: opencog_example$(EXEEXT)
