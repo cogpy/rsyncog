@@ -1,0 +1,526 @@
+/*******************************************************************************
+ * Z++ FORMAL SPECIFICATION: SYSTEM STATE
+ * 
+ * RsyncOG Cognitive Architecture - System State Formalization
+ * 
+ * This specification formalizes the overall system state including all
+ * cognitive components, their relationships, and global invariants.
+ *
+ * Copyright (C) 2025 OpenCog Cognitive Architecture Project
+ * Licensed under GNU GPL v3.0
+ ******************************************************************************/
+
+/*=============================================================================
+ * SECTION 1: GLOBAL SYSTEM STATE
+ *===========================================================================*/
+
+/**
+ * SystemState Schema
+ *
+ * Top-level state representing the entire RsyncOG cognitive system.
+ * Encapsulates all subsystems and their interactions.
+ *
+ * Global Invariants:
+ * - At most one instance of Agent Zero exists
+ * - All agents share the same AtomSpace reference
+ * - All swarm formations reference atoms in the shared AtomSpace
+ * - Distributed nodes are synchronized with the local AtomSpace
+ * - All learning history references valid atoms
+ *
+ * System Integrity:
+ * - No orphaned agents (all agents registered in agent_registry)
+ * - No orphaned swarms (all swarms have valid coordinator)
+ * - Referential integrity between all subsystems
+ */
+┌─ SystemState ──────────────────────────────────────────────────────────┐
+│ /* Core Knowledge Base */                                              │
+│ atomspace          : AtomSpace                                         │
+│                                                                         │
+│ /* Agent System */                                                     │
+│ agents             : seq CogAgent                                      │
+│ agent_registry     : AGENT_TYPE ⇸ CogAgent                             │
+│ agent_zero         : CogAgent                                          │
+│                                                                         │
+│ /* Swarm Coordination */                                               │
+│ swarm_formations   : seq SwarmFormation                                │
+│ swarm_coordinator  : CogAgent                                          │
+│                                                                         │
+│ /* Reasoning Systems */                                                │
+│ pln_context        : PLNInferenceContext                               │
+│ learning_context   : LearningContext                                   │
+│ reconfig_context   : ReconfigContext                                   │
+│                                                                         │
+│ /* Distributed System */                                               │
+│ distributed_as     : DistributedAtomSpace                              │
+│                                                                         │
+│ /* Monitoring */                                                       │
+│ production_monitor : ProductionMonitor                                 │
+│                                                                         │
+│ /* System Metadata */                                                  │
+│ initialized        : 𝔹                                                 │
+│ running            : 𝔹                                                 │
+│ startup_time       : TIMESTAMP                                         │
+│ last_config_gen    : TIMESTAMP                                         │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Global Invariants */                                                │
+│                                                                         │
+│ /* Agent Zero uniqueness and validity */                               │
+│ agent_zero.agent_type = cog_agent_zero                                 │
+│ agent_zero ∈ ran agents                                                │
+│ #(agents ▷ {a : CogAgent | a.agent_type = cog_agent_zero}) = 1         │
+│                                                                         │
+│ /* All agents share same AtomSpace */                                  │
+│ ∀ a : CogAgent | a ∈ ran agents ⇒                                      │
+│   a.atomspace_ref = atomspace                                          │
+│                                                                         │
+│ /* Agent registry consistency */                                       │
+│ ∀ a : CogAgent | a ∈ ran agents ⇒                                      │
+│   a.agent_type ∈ dom agent_registry ∧                                  │
+│   agent_registry(a.agent_type) = a                                     │
+│                                                                         │
+│ /* Swarm coordinator validity */                                       │
+│ swarm_coordinator ∈ ran agents                                         │
+│ swarm_coordinator.agent_type = cog_agent_swarm                         │
+│ swarm_coordinator.state ≠ cog_state_shutdown                           │
+│                                                                         │
+│ /* All swarm formations have valid coordinator */                      │
+│ ∀ sf : SwarmFormation | sf ∈ ran swarm_formations ⇒                    │
+│   sf.coordinator = swarm_coordinator ∧                                 │
+│   sf.swarm_atom.handle ∈ dom atomspace.atom_table                      │
+│                                                                         │
+│ /* Distributed AtomSpace consistency */                                │
+│ distributed_as.local_atomspace = atomspace                             │
+│                                                                         │
+│ /* PLN and Learning contexts reference same AtomSpace */               │
+│ pln_context.atomspace = atomspace                                      │
+│ learning_context.atomspace = atomspace                                 │
+│ learning_context.pln_ctx = pln_context                                 │
+│                                                                         │
+│ /* Reconfiguration context references */                               │
+│ reconfig_context.agent_zero = agent_zero                               │
+│ reconfig_context.atomspace = atomspace                                 │
+│ reconfig_context.learning_ctx = learning_context                       │
+│                                                                         │
+│ /* System state consistency */                                         │
+│ running ⇒ initialized                                                  │
+│ initialized ⇒ startup_time > 0                                         │
+│                                                                         │
+│ /* Temporal ordering */                                                │
+│ last_config_gen = 0 ∨ last_config_gen ≥ startup_time                   │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * InitialSystemState Schema
+ *
+ * System state immediately after initialization, before any operations.
+ */
+┌─ InitialSystemState ───────────────────────────────────────────────────┐
+│ SystemState                                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ initialized = true                                                     │
+│ running = false                                                        │
+│ #agents ≥ 6  /* Minimum: Zero, Monitor, Auth, Sync, Swarm, Hypergraph */│
+│ #swarm_formations = 0                                                  │
+│ atomspace.atom_count = 0                                               │
+│ atomspace.link_count = 0                                               │
+│ last_config_gen = 0                                                    │
+│                                                                         │
+│ /* All agents in INIT or IDLE state */                                 │
+│ ∀ a : CogAgent | a ∈ ran agents ⇒                                      │
+│   a.state ∈ {cog_state_init, cog_state_idle}                           │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * RunningSystemState Schema
+ *
+ * System state during normal operation.
+ */
+┌─ RunningSystemState ───────────────────────────────────────────────────┐
+│ SystemState                                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ initialized = true                                                     │
+│ running = true                                                         │
+│                                                                         │
+│ /* At least one agent is active */                                     │
+│ ∃ a : CogAgent | a ∈ ran agents ∧                                      │
+│   a.state ∈ {cog_state_active, cog_state_coordinating}                 │
+│                                                                         │
+│ /* Agent Zero is operational */                                        │
+│ agent_zero.state ∈ {cog_state_idle, cog_state_active,                  │
+│                      cog_state_coordinating}                           │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 2: PLN INFERENCE CONTEXT STATE
+ *===========================================================================*/
+
+/**
+ * PLNInferenceContext Schema
+ *
+ * State of the Probabilistic Logic Networks inference engine.
+ *
+ * Invariants:
+ * - Thresholds are in valid probability ranges
+ * - Max inference depth is positive and bounded
+ * - All historical patterns reference valid atoms
+ */
+┌─ PLNInferenceContext ──────────────────────────────────────────────────┐
+│ atomspace             : AtomSpace                                      │
+│ inferences_performed  : ℕ                                              │
+│ rules_applied         : ℕ                                              │
+│ predictions_made      : ℕ                                              │
+│ confidence_threshold  : ℝ                                              │
+│ strength_threshold    : ℝ                                              │
+│ max_inference_depth   : ℕ                                              │
+│ sync_patterns         : seq SyncPattern                                │
+│ pattern_count         : ℕ                                              │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Threshold validity */                                               │
+│ 0.0 ≤ confidence_threshold ≤ 1.0                                       │
+│ 0.0 ≤ strength_threshold ≤ 1.0                                         │
+│                                                                         │
+│ /* Inference depth bounds */                                           │
+│ 1 ≤ max_inference_depth ≤ 10                                           │
+│                                                                         │
+│ /* Counter invariants */                                               │
+│ inferences_performed ≥ rules_applied                                   │
+│ predictions_made ≤ inferences_performed                                │
+│                                                                         │
+│ /* Pattern consistency */                                              │
+│ pattern_count = #sync_patterns                                         │
+│ ∀ p : SyncPattern | p ∈ ran sync_patterns ⇒                            │
+│   (∃ a : Atom | a ∈ ran atomspace.atom_table ∧                         │
+│                 a.atom_type = atom_module ∧                            │
+│                 a.name = p.module_name)                                │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * DefaultPLNInferenceContext Schema
+ *
+ * Initial PLN configuration with standard thresholds.
+ */
+┌─ DefaultPLNInferenceContext ───────────────────────────────────────────┐
+│ PLNInferenceContext                                                    │
+├────────────────────────────────────────────────────────────────────────┤
+│ inferences_performed = 0                                               │
+│ rules_applied = 0                                                      │
+│ predictions_made = 0                                                   │
+│ confidence_threshold = 0.5                                             │
+│ strength_threshold = 0.3                                               │
+│ max_inference_depth = 5                                                │
+│ sync_patterns = ⟨⟩                                                     │
+│ pattern_count = 0                                                      │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 3: LEARNING CONTEXT STATE
+ *===========================================================================*/
+
+/**
+ * LearningContext Schema
+ *
+ * State of the experience-based learning module.
+ *
+ * Invariants:
+ * - Learning rate is in (0.0, 1.0]
+ * - Decay factor is in [0.0, 1.0]
+ * - History size doesn't exceed maximum
+ * - Statistics are consistent with history
+ */
+┌─ LearningContext ──────────────────────────────────────────────────────┐
+│ atomspace            : AtomSpace                                       │
+│ pln_ctx              : PLNInferenceContext                             │
+│ history              : seq SyncHistoryEntry                            │
+│ history_count        : ℕ                                               │
+│ max_history_size     : ℕ                                               │
+│ learning_rate        : ℝ                                               │
+│ decay_factor         : ℝ                                               │
+│ enable_temporal      : 𝔹                                               │
+│ stats                : LearningStats                                   │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* History size constraints */                                         │
+│ history_count = #history                                               │
+│ history_count ≤ max_history_size                                       │
+│ max_history_size > 0                                                   │
+│                                                                         │
+│ /* Learning parameter bounds */                                        │
+│ 0.0 < learning_rate ≤ 1.0                                              │
+│ 0.0 ≤ decay_factor ≤ 1.0                                               │
+│                                                                         │
+│ /* Statistics consistency */                                           │
+│ stats.total_observations = history_count                               │
+│ stats.predictions_correct + stats.predictions_incorrect =              │
+│   stats.total_observations                                             │
+│ stats.total_observations > 0 ⇒                                         │
+│   stats.prediction_accuracy =                                          │
+│     stats.predictions_correct / stats.total_observations               │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * LearningStats Schema
+ *
+ * Aggregate statistics for the learning module.
+ */
+┌─ LearningStats ────────────────────────────────────────────────────────┐
+│ total_observations      : ℕ                                            │
+│ truth_value_updates     : ℕ                                            │
+│ patterns_learned        : ℕ                                            │
+│ predictions_correct     : ℕ                                            │
+│ predictions_incorrect   : ℕ                                            │
+│ prediction_accuracy     : ℝ                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Non-negative counters */                                            │
+│ total_observations ≥ 0                                                 │
+│ truth_value_updates ≥ 0                                                │
+│ patterns_learned ≥ 0                                                   │
+│ predictions_correct ≥ 0                                                │
+│ predictions_incorrect ≥ 0                                              │
+│                                                                         │
+│ /* Accuracy bounds */                                                  │
+│ 0.0 ≤ prediction_accuracy ≤ 1.0                                        │
+│                                                                         │
+│ /* Logical consistency */                                              │
+│ predictions_correct ≤ total_observations                               │
+│ predictions_incorrect ≤ total_observations                             │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 4: RECONFIGURATION CONTEXT STATE
+ *===========================================================================*/
+
+/**
+ * ReconfigContext Schema
+ *
+ * State of the dynamic reconfiguration system.
+ *
+ * Invariants:
+ * - Auto-reconfiguration threshold is valid probability
+ * - Minimum interval is positive
+ * - Reconfiguration count is non-decreasing
+ * - Last reconfiguration time is valid
+ */
+┌─ ReconfigContext ──────────────────────────────────────────────────────┐
+│ agent_zero           : CogAgent                                        │
+│ atomspace            : AtomSpace                                       │
+│ learning_ctx         : LearningContext                                 │
+│ auto_enabled         : 𝔹                                               │
+│ threshold            : ℝ                                               │
+│ min_interval         : ℕ  /* seconds */                                │
+│ reconfig_count       : ℕ                                               │
+│ last_reconfig_time   : TIMESTAMP                                       │
+│ last_success_rate    : ℝ                                               │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Agent Zero must be orchestrator */                                  │
+│ agent_zero.agent_type = cog_agent_zero                                 │
+│                                                                         │
+│ /* Threshold validity */                                               │
+│ 0.0 ≤ threshold ≤ 1.0                                                  │
+│                                                                         │
+│ /* Interval bounds */                                                  │
+│ min_interval ≥ 60  /* At least 1 minute */                             │
+│                                                                         │
+│ /* Success rate bounds */                                              │
+│ 0.0 ≤ last_success_rate ≤ 1.0                                          │
+│                                                                         │
+│ /* Temporal consistency */                                             │
+│ reconfig_count > 0 ⇒ last_reconfig_time > 0                            │
+│ reconfig_count = 0 ⇒ last_reconfig_time = 0                            │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 5: PRODUCTION MONITOR STATE
+ *===========================================================================*/
+
+/**
+ * ProductionMonitor Schema
+ *
+ * State of the production monitoring system.
+ *
+ * Invariants:
+ * - All metrics are non-negative
+ * - Percentages are in valid range
+ * - Alert thresholds are properly ordered
+ */
+┌─ ProductionMonitor ────────────────────────────────────────────────────┐
+│ atomspace             : AtomSpace                                      │
+│ total_sync_ops        : ℕ                                              │
+│ successful_sync_ops   : ℕ                                              │
+│ failed_sync_ops       : ℕ                                              │
+│ total_bytes_synced    : ℕ                                              │
+│ avg_sync_duration     : ℕ  /* milliseconds */                          │
+│ uptime                : ℕ  /* seconds */                               │
+│ success_rate          : ℝ                                              │
+│ alert_threshold_low   : ℝ                                              │
+│ alert_threshold_critical : ℝ                                           │
+│ alerts_triggered      : ℕ                                              │
+│ last_alert_time       : TIMESTAMP                                      │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Counter consistency */                                              │
+│ successful_sync_ops + failed_sync_ops = total_sync_ops                 │
+│ successful_sync_ops ≤ total_sync_ops                                   │
+│                                                                         │
+│ /* Success rate calculation */                                         │
+│ total_sync_ops > 0 ⇒                                                   │
+│   success_rate = successful_sync_ops / total_sync_ops                  │
+│ 0.0 ≤ success_rate ≤ 1.0                                               │
+│                                                                         │
+│ /* Alert threshold ordering */                                         │
+│ 0.0 ≤ alert_threshold_critical < alert_threshold_low ≤ 1.0             │
+│                                                                         │
+│ /* Non-negative metrics */                                             │
+│ total_bytes_synced ≥ 0                                                 │
+│ avg_sync_duration ≥ 0                                                  │
+│ uptime ≥ 0                                                             │
+│ alerts_triggered ≥ 0                                                   │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 6: SYSTEM STATE TRANSITIONS
+ *===========================================================================*/
+
+/**
+ * SystemStateTransition Schema
+ *
+ * General schema for state transitions that preserve invariants.
+ *
+ * This is an abstract schema that concrete operations will refine.
+ */
+┌─ SystemStateTransition ────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Preserve core references */                                         │
+│ atomspace' = atomspace ∨                                               │
+│   (∀ a : Atom | a ∈ ran atomspace.atom_table ⇒                         │
+│      a.handle ∈ dom atomspace'.atom_table)                             │
+│                                                                         │
+│ /* Agent registry remains consistent */                                │
+│ ∀ at : AGENT_TYPE | at ∈ dom agent_registry ⇒                          │
+│   at ∈ dom agent_registry'                                             │
+│                                                                         │
+│ /* Monotonic properties */                                             │
+│ pln_context'.inferences_performed ≥                                    │
+│   pln_context.inferences_performed                                     │
+│ learning_context'.history_count ≥                                      │
+│   learning_context.history_count ∨                                     │
+│   learning_context'.history_count =                                    │
+│     learning_context'.max_history_size  /* Circular buffer */          │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * IdleSystemState Schema
+ *
+ * System is initialized but no operations are in progress.
+ */
+┌─ IdleSystemState ──────────────────────────────────────────────────────┐
+│ SystemState                                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ running = true                                                         │
+│                                                                         │
+│ /* All agents are idle or monitoring */                                │
+│ ∀ a : CogAgent | a ∈ ran agents ⇒                                      │
+│   a.state ∈ {cog_state_idle, cog_state_active} ∧                       │
+│   (a.agent_type = cog_agent_monitor ∨ a.state = cog_state_idle)        │
+│                                                                         │
+│ /* No swarms are actively coordinating */                              │
+│ ∀ sf : SwarmFormation | sf ∈ ran swarm_formations ⇒                    │
+│   sf.state ∈ {swarm_idle, swarm_active}                                │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * ShutdownSystemState Schema
+ *
+ * System is shutting down gracefully.
+ */
+┌─ ShutdownSystemState ──────────────────────────────────────────────────┐
+│ SystemState                                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ running = false                                                        │
+│                                                                         │
+│ /* All agents are shutdown or shutting down */                         │
+│ ∀ a : CogAgent | a ∈ ran agents ⇒                                      │
+│   a.state = cog_state_shutdown                                         │
+│                                                                         │
+│ /* All swarms are disbanded */                                         │
+│ ∀ sf : SwarmFormation | sf ∈ ran swarm_formations ⇒                    │
+│   sf.state = swarm_disbanding ∨ sf.member_count = 0                    │
+│                                                                         │
+│ /* AtomSpace persisted */                                              │
+│ ∃ persist_path : NAME |                                                │
+│   atomspace_serialized(atomspace, persist_path)                        │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 7: SYSTEM HEALTH AND CONSISTENCY
+ *===========================================================================*/
+
+/**
+ * SystemHealthCheck Schema
+ *
+ * Defines predicates for verifying system health and consistency.
+ */
+┌─ SystemHealthCheck ────────────────────────────────────────────────────┐
+│ ΞSystemState                                                           │
+│ health_ok : 𝔹                                                          │
+├────────────────────────────────────────────────────────────────────────┤
+│ health_ok ⇔                                                            │
+│   /* All essential agents are operational */                           │
+│   (∀ at : {cog_agent_zero, cog_agent_monitor, cog_agent_swarm} |       │
+│      ∃ a : CogAgent | a ∈ ran agents ∧                                 │
+│        a.agent_type = at ∧                                             │
+│        a.state ≠ cog_state_error ∧                                     │
+│        a.state ≠ cog_state_shutdown) ∧                                 │
+│                                                                         │
+│   /* AtomSpace integrity maintained */                                 │
+│   (∀ l : AtomLink | l ∈ ran atomspace.link_table ⇒                     │
+│      (∀ a : Atom | a ∈ ran l.outgoing ⇒                                │
+│         a.handle ∈ dom atomspace.atom_table)) ∧                        │
+│                                                                         │
+│   /* Swarm formations are valid */                                     │
+│   (∀ sf : SwarmFormation | sf ∈ ran swarm_formations ⇒                 │
+│      sf.state ≠ swarm_disbanding ∧                                     │
+│      sf.member_count ≥ 2) ∧                                            │
+│                                                                         │
+│   /* Performance is acceptable */                                      │
+│   production_monitor.success_rate ≥                                    │
+│     production_monitor.alert_threshold_critical                        │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * SystemConsistencyCheck Schema
+ *
+ * Verifies deep consistency across all subsystems.
+ */
+┌─ SystemConsistencyCheck ───────────────────────────────────────────────┐
+│ ΞSystemState                                                           │
+│ consistent : 𝔹                                                         │
+├────────────────────────────────────────────────────────────────────────┤
+│ consistent ⇔                                                           │
+│   /* All atoms referenced in learning history exist */                 │
+│   (∀ h : SyncHistoryEntry | h ∈ ran learning_context.history ⇒         │
+│      (∃ a : Atom | a ∈ ran atomspace.atom_table ∧                      │
+│         a.atom_type = atom_module ∧                                    │
+│         a.name = h.module_name)) ∧                                     │
+│                                                                         │
+│   /* All PLN patterns reference valid atoms */                         │
+│   (∀ p : SyncPattern | p ∈ ran pln_context.sync_patterns ⇒             │
+│      (∃ a : Atom | a ∈ ran atomspace.atom_table ∧                      │
+│         a.atom_type = atom_module ∧                                    │
+│         a.name = p.module_name)) ∧                                     │
+│                                                                         │
+│   /* Distributed nodes are synchronized */                             │
+│   (∀ n : AtomSpaceNode | n ∈ ran distributed_as.nodes ⇒                │
+│      n.connected ⇒                                                     │
+│        n.remote_mirror.atom_count ≥ atomspace.atom_count / 2) ∧        │
+│                                                                         │
+│   /* Agent message queues are bounded */                               │
+│   (∀ a : CogAgent | a ∈ ran agents ⇒                                   │
+│      a.msg_queue_size ≤ 1000)  /* Max queue size */                    │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*******************************************************************************
+ * END OF SYSTEM STATE SPECIFICATION
+ *
+ * This specification defines the complete state space of the RsyncOG cognitive
+ * architecture and establishes the invariants that must be maintained across
+ * all operations.
+ ******************************************************************************/

@@ -1,0 +1,606 @@
+/*******************************************************************************
+ * Z++ FORMAL SPECIFICATION: DATA MODEL
+ * 
+ * RsyncOG Cognitive Architecture - Data Layer Formalization
+ * 
+ * This specification formalizes the data structures and invariants of the
+ * AtomSpace hypergraph knowledge representation system and related cognitive
+ * data models.
+ *
+ * Copyright (C) 2025 OpenCog Cognitive Architecture Project
+ * Licensed under GNU GPL v3.0
+ ******************************************************************************/
+
+/*=============================================================================
+ * SECTION 1: BASIC TYPES AND CONSTANTS
+ *===========================================================================*/
+
+/* Basic type definitions aligned with C implementation */
+[HANDLE]        /* Unique 64-bit identifier for atoms and links */
+[TIMESTAMP]     /* Unix timestamp for temporal tracking */
+[NAME]          /* String identifier (max 256 chars) */
+[CAPABILITY]    /* Agent capability flags (32-bit bitmap) */
+
+/* Finite set of atom types */
+ATOM_TYPE ::= atom_node | atom_concept | atom_rsync_daemon | 
+              atom_sync_path | atom_host | atom_module | atom_swarm
+
+/* Finite set of link types */
+LINK_TYPE ::= link_inheritance | link_similarity | link_sync_topology |
+              link_swarm_member | link_auth_trust | link_dependency
+
+/* Finite set of agent types */
+AGENT_TYPE ::= cog_agent_zero | cog_agent_sync | cog_agent_monitor |
+               cog_agent_auth | cog_agent_swarm | cog_agent_hypergraph
+
+/* Finite set of agent states */
+AGENT_STATE ::= cog_state_init | cog_state_idle | cog_state_active |
+                cog_state_coordinating | cog_state_error | cog_state_shutdown
+
+/* Finite set of swarm states */
+SWARM_STATE ::= swarm_forming | swarm_active | swarm_coordinating |
+                swarm_idle | swarm_disbanding
+
+/*=============================================================================
+ * SECTION 2: TRUTH VALUES (PROBABILISTIC LOGIC)
+ *===========================================================================*/
+
+/**
+ * TruthValue Schema
+ * 
+ * Represents probabilistic truth values in PLN (Probabilistic Logic Networks).
+ * Strength represents probability, confidence represents evidence weight.
+ *
+ * Invariants:
+ * - Both strength and confidence are bounded in [0.0, 1.0]
+ * - Higher confidence indicates more observations/evidence
+ */
+┌─ TruthValue ───────────────────────────────────────────────────────────┐
+│ strength    : ℝ                                                        │
+│ confidence  : ℝ                                                        │
+├────────────────────────────────────────────────────────────────────────┤
+│ 0.0 ≤ strength ≤ 1.0                                                   │
+│ 0.0 ≤ confidence ≤ 1.0                                                 │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * Default Truth Value Schema
+ *
+ * Provides standard initial truth value for new atoms.
+ */
+┌─ DefaultTruthValue ────────────────────────────────────────────────────┐
+│ TruthValue                                                             │
+├────────────────────────────────────────────────────────────────────────┤
+│ strength = 1.0                                                         │
+│ confidence = 0.9                                                       │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 3: ATTENTION VALUES (ECAN)
+ *===========================================================================*/
+
+/**
+ * AttentionValue Schema
+ *
+ * Implements Economic Attention Allocation Network (ECAN) values.
+ * STI (Short-Term Importance) tracks recent activity.
+ * LTI (Long-Term Importance) tracks historical relevance.
+ * VLTI (Very Long-Term Importance) tracks structural significance.
+ *
+ * Invariants:
+ * - STI ranges from -32768 to 32767 (int16_t)
+ * - LTI ranges from -32768 to 32767 (int16_t)
+ * - VLTI ranges from 0 to 65535 (uint16_t)
+ */
+┌─ AttentionValue ───────────────────────────────────────────────────────┐
+│ sti    : ℤ                                                             │
+│ lti    : ℤ                                                             │
+│ vlti   : ℕ                                                             │
+├────────────────────────────────────────────────────────────────────────┤
+│ -32768 ≤ sti ≤ 32767                                                   │
+│ -32768 ≤ lti ≤ 32767                                                   │
+│ 0 ≤ vlti ≤ 65535                                                       │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * Default Attention Value Schema
+ *
+ * Initial attention allocation for newly created atoms.
+ */
+┌─ DefaultAttentionValue ────────────────────────────────────────────────┐
+│ AttentionValue                                                         │
+├────────────────────────────────────────────────────────────────────────┤
+│ sti = 100                                                              │
+│ lti = 0                                                                │
+│ vlti = 0                                                               │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 4: ATOM (HYPERGRAPH NODE)
+ *===========================================================================*/
+
+/**
+ * Atom Schema
+ *
+ * Fundamental unit of the AtomSpace hypergraph. Represents a concept,
+ * entity, or node in the distributed sync topology.
+ *
+ * Invariants:
+ * - handle is globally unique within an AtomSpace
+ * - name is non-empty for named atoms
+ * - created ≤ last_accessed (temporal ordering)
+ * - access_count ≥ 0 (non-negative access counter)
+ *
+ * Relations:
+ * - Each atom has exactly one truth value
+ * - Each atom has exactly one attention value
+ * - Atoms may have optional rsync-specific metadata
+ */
+┌─ Atom ─────────────────────────────────────────────────────────────────┐
+│ handle         : HANDLE                                                │
+│ atom_type      : ATOM_TYPE                                             │
+│ name           : NAME                                                  │
+│ tv             : TruthValue                                            │
+│ av             : AttentionValue                                        │
+│ created        : TIMESTAMP                                             │
+│ last_accessed  : TIMESTAMP                                             │
+│ access_count   : ℕ                                                     │
+│ rsync_metadata : ℙ(ℤ × ℤ)  /* Optional key-value pairs */             │
+├────────────────────────────────────────────────────────────────────────┤
+│ created ≤ last_accessed                                                │
+│ access_count ≥ 0                                                       │
+│ name ≠ ∅  ⇒  atom_type ∈ {atom_module, atom_host, atom_swarm,         │
+│                            atom_rsync_daemon, atom_sync_path}          │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * ModuleAtom Schema
+ *
+ * Specialized atom representing an rsync module.
+ * Inherits from Atom with module-specific constraints.
+ */
+┌─ ModuleAtom ───────────────────────────────────────────────────────────┐
+│ Atom                                                                   │
+│ module_path    : NAME                                                  │
+│ read_only      : 𝔹                                                     │
+├────────────────────────────────────────────────────────────────────────┤
+│ atom_type = atom_module                                                │
+│ name ≠ ∅                                                               │
+│ module_path ≠ ∅                                                        │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * HostAtom Schema
+ *
+ * Represents a network host/server in the sync topology.
+ */
+┌─ HostAtom ─────────────────────────────────────────────────────────────┐
+│ Atom                                                                   │
+│ hostname       : NAME                                                  │
+│ port           : ℕ                                                     │
+├────────────────────────────────────────────────────────────────────────┤
+│ atom_type = atom_host                                                  │
+│ name = hostname                                                        │
+│ 1 ≤ port ≤ 65535                                                       │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * SwarmAtom Schema
+ *
+ * Represents a swarm formation for coordinated sync operations.
+ */
+┌─ SwarmAtom ────────────────────────────────────────────────────────────┐
+│ Atom                                                                   │
+│ swarm_name     : NAME                                                  │
+│ member_count   : ℕ                                                     │
+├────────────────────────────────────────────────────────────────────────┤
+│ atom_type = atom_swarm                                                 │
+│ name = swarm_name                                                      │
+│ member_count ≥ 2  /* Swarm requires at least 2 members */              │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 5: ATOM LINK (HYPERGRAPH EDGE)
+ *===========================================================================*/
+
+/**
+ * AtomLink Schema
+ *
+ * Represents a directed hypergraph edge connecting atoms.
+ * The outgoing set contains the atoms being linked.
+ *
+ * Invariants:
+ * - handle is globally unique within an AtomSpace
+ * - outgoing set is non-empty
+ * - all atoms in outgoing set exist in the same AtomSpace
+ *
+ * Relations:
+ * - Each link has exactly one truth value
+ * - Each link has exactly one attention value
+ */
+┌─ AtomLink ─────────────────────────────────────────────────────────────┐
+│ handle         : HANDLE                                                │
+│ link_type      : LINK_TYPE                                             │
+│ outgoing       : seq Atom                                              │
+│ tv             : TruthValue                                            │
+│ av             : AttentionValue                                        │
+│ created        : TIMESTAMP                                             │
+├────────────────────────────────────────────────────────────────────────┤
+│ #outgoing ≥ 1                                                          │
+│ ∀ a : Atom | a ∈ ran outgoing ⇒ a.handle ∈ dom atomspace_atoms        │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * SyncTopologyLink Schema
+ *
+ * Links a module atom to a host atom, representing sync relationship.
+ */
+┌─ SyncTopologyLink ─────────────────────────────────────────────────────┐
+│ AtomLink                                                               │
+├────────────────────────────────────────────────────────────────────────┤
+│ link_type = link_sync_topology                                         │
+│ #outgoing = 2                                                          │
+│ outgoing(1).atom_type = atom_module                                    │
+│ outgoing(2).atom_type = atom_host                                      │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * SwarmMemberLink Schema
+ *
+ * Links a swarm atom to its member atoms (modules or hosts).
+ */
+┌─ SwarmMemberLink ──────────────────────────────────────────────────────┐
+│ AtomLink                                                               │
+├────────────────────────────────────────────────────────────────────────┤
+│ link_type = link_swarm_member                                          │
+│ #outgoing = 2                                                          │
+│ outgoing(1).atom_type = atom_swarm                                     │
+│ outgoing(2).atom_type ∈ {atom_module, atom_host}                       │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * AuthTrustLink Schema
+ *
+ * Represents authentication/trust relationship between daemon and module.
+ */
+┌─ AuthTrustLink ────────────────────────────────────────────────────────┐
+│ AtomLink                                                               │
+├────────────────────────────────────────────────────────────────────────┤
+│ link_type = link_auth_trust                                            │
+│ #outgoing = 2                                                          │
+│ outgoing(1).atom_type = atom_rsync_daemon                              │
+│ outgoing(2).atom_type = atom_module                                    │
+│ tv.strength ≥ 0.8  /* High trust requirement */                        │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 6: ATOMSPACE (HYPERGRAPH KNOWLEDGE BASE)
+ *===========================================================================*/
+
+/**
+ * AtomSpace Schema
+ *
+ * The central hypergraph knowledge base containing all atoms and links.
+ *
+ * Invariants:
+ * - All handles are unique
+ * - atom_count = #atom_table
+ * - link_count = #link_table
+ * - next_handle > max(all existing handles)
+ * - All atoms in attention_queue exist in atom_table
+ *
+ * Structural Integrity:
+ * - No dangling links (all referenced atoms exist)
+ * - No duplicate atoms (same type and name)
+ * - Hash table sizes are prime numbers for distribution
+ */
+┌─ AtomSpace ────────────────────────────────────────────────────────────┐
+│ atom_table         : HANDLE ⇸ Atom                                     │
+│ link_table         : HANDLE ⇸ AtomLink                                 │
+│ atom_count         : ℕ                                                 │
+│ link_count         : ℕ                                                 │
+│ next_handle        : HANDLE                                            │
+│ attention_queue    : seq Atom                                          │
+│ sync_topology_root : Atom                                              │
+│ swarm_nodes        : seq SwarmAtom                                     │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Count invariants */                                                 │
+│ atom_count = #atom_table                                               │
+│ link_count = #link_table                                               │
+│                                                                         │
+│ /* Handle uniqueness */                                                │
+│ dom atom_table ∩ dom link_table = ∅                                    │
+│ next_handle > max(dom atom_table ∪ dom link_table)                     │
+│                                                                         │
+│ /* Referential integrity for links */                                  │
+│ ∀ l : AtomLink | l ∈ ran link_table ⇒                                  │
+│   (∀ a : Atom | a ∈ ran l.outgoing ⇒ a.handle ∈ dom atom_table)       │
+│                                                                         │
+│ /* Attention queue validity */                                         │
+│ ∀ a : Atom | a ∈ ran attention_queue ⇒ a.handle ∈ dom atom_table      │
+│                                                                         │
+│ /* Sync topology root exists */                                        │
+│ sync_topology_root ≠ null ⇒                                            │
+│   sync_topology_root.handle ∈ dom atom_table                           │
+│                                                                         │
+│ /* Swarm nodes are valid */                                            │
+│ ∀ s : SwarmAtom | s ∈ ran swarm_nodes ⇒                                │
+│   s.handle ∈ dom atom_table                                            │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * EmptyAtomSpace Schema
+ *
+ * Initial state of a newly created AtomSpace.
+ */
+┌─ EmptyAtomSpace ───────────────────────────────────────────────────────┐
+│ AtomSpace                                                              │
+├────────────────────────────────────────────────────────────────────────┤
+│ atom_table = ∅                                                         │
+│ link_table = ∅                                                         │
+│ atom_count = 0                                                         │
+│ link_count = 0                                                         │
+│ next_handle = 1                                                        │
+│ attention_queue = ⟨⟩                                                   │
+│ swarm_nodes = ⟨⟩                                                       │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 7: COGNITIVE AGENT DATA MODEL
+ *===========================================================================*/
+
+/**
+ * CogAgent Schema
+ *
+ * Represents an autonomous cognitive agent in the multi-agent system.
+ *
+ * Invariants:
+ * - agent_id is unique within the agent system
+ * - capabilities bitmap indicates agent abilities
+ * - tasks_processed and tasks_failed are non-decreasing
+ * - msg_queue_size = #msg_queue
+ */
+┌─ CogAgent ─────────────────────────────────────────────────────────────┐
+│ agent_id        : HANDLE                                               │
+│ agent_type      : AGENT_TYPE                                           │
+│ state           : AGENT_STATE                                          │
+│ name            : NAME                                                 │
+│ capabilities    : CAPABILITY                                           │
+│ tasks_processed : ℕ                                                    │
+│ tasks_failed    : ℕ                                                    │
+│ last_active     : TIMESTAMP                                            │
+│ msg_queue       : seq CogMessage                                       │
+│ msg_queue_size  : ℕ                                                    │
+│ atomspace_ref   : AtomSpace                                            │
+├────────────────────────────────────────────────────────────────────────┤
+│ msg_queue_size = #msg_queue                                            │
+│ tasks_failed ≤ tasks_processed                                         │
+│ name ≠ ∅                                                               │
+│                                                                         │
+│ /* Agent Zero specific capabilities */                                 │
+│ agent_type = cog_agent_zero ⇒                                          │
+│   (capabilities ∧ COG_CAP_ORCHESTRATE ≠ 0) ∧                           │
+│   (capabilities ∧ COG_CAP_BUILD_CONFIG ≠ 0)                            │
+│                                                                         │
+│ /* Monitor agent specific capabilities */                              │
+│ agent_type = cog_agent_monitor ⇒                                       │
+│   (capabilities ∧ COG_CAP_MONITOR ≠ 0)                                 │
+│                                                                         │
+│ /* Swarm agent specific capabilities */                                │
+│ agent_type = cog_agent_swarm ⇒                                         │
+│   (capabilities ∧ COG_CAP_SWARM ≠ 0)                                   │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * CogMessage Schema
+ *
+ * Inter-agent communication message.
+ *
+ * Invariants:
+ * - msg_id is unique
+ * - sender_id and receiver_id reference valid agents
+ * - timestamp is monotonically increasing
+ */
+┌─ CogMessage ───────────────────────────────────────────────────────────┐
+│ msg_id      : HANDLE                                                   │
+│ sender_id   : HANDLE                                                   │
+│ receiver_id : HANDLE                                                   │
+│ msg_type    : {task, query, response, status, sync_req, sync_ack,     │
+│                swarm_form, swarm_update}                               │
+│ timestamp   : TIMESTAMP                                                │
+│ payload     : seq ℤ  /* Binary payload data */                         │
+├────────────────────────────────────────────────────────────────────────┤
+│ sender_id ≠ receiver_id  /* No self-messaging */                       │
+│ timestamp > 0                                                          │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 8: SWARM FORMATION DATA MODEL
+ *===========================================================================*/
+
+/**
+ * SwarmMember Schema
+ *
+ * Represents a member of a swarm formation.
+ */
+┌─ SwarmMember ──────────────────────────────────────────────────────────┐
+│ member_atom    : Atom                                                  │
+│ member_agent   : CogAgent                                              │
+│ hostname       : NAME                                                  │
+│ port           : ℕ                                                     │
+│ state          : SWARM_STATE                                           │
+│ last_sync      : TIMESTAMP                                             │
+│ bytes_synced   : ℕ                                                     │
+├────────────────────────────────────────────────────────────────────────┤
+│ 1 ≤ port ≤ 65535                                                       │
+│ hostname ≠ ∅                                                           │
+│ bytes_synced ≥ 0                                                       │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * SwarmFormation Schema
+ *
+ * Represents a coordinated swarm formation for distributed sync.
+ *
+ * Invariants:
+ * - swarm_id is unique
+ * - member_count ≥ 2 (minimum swarm size)
+ * - formation_time ≤ last_activity
+ * - total_bytes is sum of all member bytes_synced
+ */
+┌─ SwarmFormation ───────────────────────────────────────────────────────┐
+│ swarm_id         : HANDLE                                              │
+│ name             : NAME                                                │
+│ state            : SWARM_STATE                                         │
+│ members          : seq SwarmMember                                     │
+│ member_count     : ℕ                                                   │
+│ coordinator      : CogAgent                                            │
+│ swarm_atom       : SwarmAtom                                           │
+│ total_syncs      : ℕ                                                   │
+│ total_bytes      : ℕ                                                   │
+│ formation_time   : TIMESTAMP                                           │
+│ last_activity    : TIMESTAMP                                           │
+├────────────────────────────────────────────────────────────────────────┤
+│ member_count = #members                                                │
+│ member_count ≥ 2                                                       │
+│ formation_time ≤ last_activity                                         │
+│ coordinator.agent_type = cog_agent_swarm                               │
+│ swarm_atom.swarm_name = name                                           │
+│ total_syncs ≥ 0                                                        │
+│ total_bytes ≥ 0                                                        │
+│                                                                         │
+│ /* State consistency */                                                │
+│ state = swarm_disbanding ⇒ member_count = 0                            │
+│ state = swarm_active ⇒                                                 │
+│   (∀ m : SwarmMember | m ∈ ran members ⇒                               │
+│     m.state ∈ {swarm_active, swarm_coordinating})                      │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 9: PLN INFERENCE DATA MODEL
+ *===========================================================================*/
+
+/**
+ * SyncPattern Schema
+ *
+ * Represents a learned synchronization pattern discovered by PLN inference.
+ *
+ * Invariants:
+ * - success_rate = successful_syncs / total_syncs when total_syncs > 0
+ * - All temporal fields are non-negative
+ */
+┌─ SyncPattern ──────────────────────────────────────────────────────────┐
+│ module_name       : NAME                                               │
+│ host_name         : NAME                                               │
+│ total_syncs       : ℕ                                                  │
+│ successful_syncs  : ℕ                                                  │
+│ failed_syncs      : ℕ                                                  │
+│ total_bytes       : ℕ                                                  │
+│ last_sync         : TIMESTAMP                                          │
+│ avg_duration      : ℕ                                                  │
+│ success_rate      : ℝ                                                  │
+│ predicted_success : TruthValue                                         │
+│ predicted_duration: ℕ                                                  │
+├────────────────────────────────────────────────────────────────────────┤
+│ successful_syncs + failed_syncs = total_syncs                          │
+│ successful_syncs ≤ total_syncs                                         │
+│ total_syncs > 0 ⇒ success_rate = successful_syncs / total_syncs        │
+│ 0.0 ≤ success_rate ≤ 1.0                                               │
+│ avg_duration ≥ 0                                                       │
+│ predicted_duration ≥ 0                                                 │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * SyncHistoryEntry Schema
+ *
+ * Individual sync event record for learning module.
+ */
+┌─ SyncHistoryEntry ─────────────────────────────────────────────────────┐
+│ entry_id          : HANDLE                                             │
+│ module_name       : NAME                                               │
+│ host_name         : NAME                                               │
+│ timestamp         : TIMESTAMP                                          │
+│ success           : 𝔹                                                  │
+│ bytes_transferred : ℕ                                                  │
+│ duration          : ℕ                                                  │
+│ error_code        : ℤ                                                  │
+│ hour_of_day       : ℕ                                                  │
+│ day_of_week       : ℕ                                                  │
+├────────────────────────────────────────────────────────────────────────┤
+│ 0 ≤ hour_of_day ≤ 23                                                   │
+│ 0 ≤ day_of_week ≤ 6                                                    │
+│ duration ≥ 0                                                           │
+│ bytes_transferred ≥ 0                                                  │
+│ success = false ⇒ error_code ≠ 0                                       │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 10: DISTRIBUTED ATOMSPACE DATA MODEL
+ *===========================================================================*/
+
+/**
+ * AtomSpaceNode Schema
+ *
+ * Represents a node in the distributed AtomSpace network.
+ */
+┌─ AtomSpaceNode ────────────────────────────────────────────────────────┐
+│ node_id        : HANDLE                                                │
+│ hostname       : NAME                                                  │
+│ port           : ℕ                                                     │
+│ connected      : 𝔹                                                     │
+│ last_sync      : TIMESTAMP                                             │
+│ atoms_synced   : ℕ                                                     │
+│ remote_mirror  : AtomSpace                                             │
+├────────────────────────────────────────────────────────────────────────┤
+│ 1 ≤ port ≤ 65535                                                       │
+│ hostname ≠ ∅                                                           │
+│ connected = false ⇒ last_sync = 0                                      │
+│ atoms_synced ≥ 0                                                       │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * DistributedAtomSpace Schema
+ *
+ * Manages synchronization of AtomSpace across distributed nodes.
+ *
+ * Invariants:
+ * - node_count = #nodes
+ * - All nodes have unique node_ids
+ * - Conflict resolution strategy is defined
+ */
+┌─ DistributedAtomSpace ─────────────────────────────────────────────────┐
+│ local_atomspace      : AtomSpace                                       │
+│ nodes                : seq AtomSpaceNode                               │
+│ node_count           : ℕ                                               │
+│ conflict_resolution  : {latest_wins, highest_confidence,               │
+│                         merge_tv, manual}                              │
+│ atoms_sent           : ℕ                                               │
+│ atoms_received       : ℕ                                               │
+│ links_sent           : ℕ                                               │
+│ links_received       : ℕ                                               │
+│ conflicts_resolved   : ℕ                                               │
+│ last_full_sync       : TIMESTAMP                                       │
+│ last_incremental_sync: TIMESTAMP                                       │
+├────────────────────────────────────────────────────────────────────────┤
+│ node_count = #nodes                                                    │
+│                                                                         │
+│ /* All node IDs are unique */                                          │
+│ ∀ n1, n2 : AtomSpaceNode | n1 ∈ ran nodes ∧ n2 ∈ ran nodes ∧          │
+│   n1 ≠ n2 ⇒ n1.node_id ≠ n2.node_id                                   │
+│                                                                         │
+│ /* Temporal ordering of syncs */                                       │
+│ last_full_sync ≤ last_incremental_sync                                 │
+│                                                                         │
+│ /* Non-negative counters */                                            │
+│ atoms_sent ≥ 0 ∧ atoms_received ≥ 0                                    │
+│ links_sent ≥ 0 ∧ links_received ≥ 0                                    │
+│ conflicts_resolved ≥ 0                                                 │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*******************************************************************************
+ * END OF DATA MODEL SPECIFICATION
+ *
+ * This specification provides a rigorous formal foundation for the data
+ * structures in the RsyncOG cognitive architecture. All operations must
+ * preserve these invariants.
+ ******************************************************************************/

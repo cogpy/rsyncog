@@ -1,0 +1,925 @@
+/*******************************************************************************
+ * Z++ FORMAL SPECIFICATION: OPERATIONS
+ * 
+ * RsyncOG Cognitive Architecture - Operation Specifications
+ * 
+ * This specification formalizes all operations that modify the system state,
+ * including initialization, agent operations, sync operations, learning,
+ * and reconfiguration.
+ *
+ * Copyright (C) 2025 OpenCog Cognitive Architecture Project
+ * Licensed under GNU GPL v3.0
+ ******************************************************************************/
+
+/*=============================================================================
+ * SECTION 1: SYSTEM INITIALIZATION OPERATIONS
+ *===========================================================================*/
+
+/**
+ * InitializeSystem Operation
+ *
+ * Initializes the complete RsyncOG system from scratch.
+ *
+ * Pre-conditions:
+ * - System is not already initialized
+ *
+ * Post-conditions:
+ * - Empty AtomSpace created
+ * - All essential agents created and registered
+ * - Agent Zero is designated as orchestrator
+ * - System marked as initialized but not running
+ * - Startup time recorded
+ */
+┌─ InitializeSystem ─────────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ startup_timestamp? : TIMESTAMP                                         │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ ¬ initialized                                                          │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ initialized' = true                                                    │
+│ running' = false                                                       │
+│ startup_time' = startup_timestamp?                                     │
+│                                                                         │
+│ /* Create empty AtomSpace */                                           │
+│ atomspace' = EmptyAtomSpace                                            │
+│                                                                         │
+│ /* Create essential agents */                                          │
+│ #agents' = 6                                                           │
+│ ∃ a0, am, aa, as, asw, ah : CogAgent |                                 │
+│   {a0, am, aa, as, asw, ah} ⊆ ran agents' ∧                            │
+│   a0.agent_type = cog_agent_zero ∧                                     │
+│   am.agent_type = cog_agent_monitor ∧                                  │
+│   aa.agent_type = cog_agent_auth ∧                                     │
+│   as.agent_type = cog_agent_sync ∧                                     │
+│   asw.agent_type = cog_agent_swarm ∧                                   │
+│   ah.agent_type = cog_agent_hypergraph ∧                               │
+│   agent_zero' = a0 ∧                                                   │
+│   swarm_coordinator' = asw                                             │
+│                                                                         │
+│ /* Initialize contexts */                                              │
+│ pln_context' = DefaultPLNInferenceContext                              │
+│ pln_context'.atomspace = atomspace'                                    │
+│                                                                         │
+│ learning_context'.history = ⟨⟩                                         │
+│ learning_context'.history_count = 0                                    │
+│ learning_context'.atomspace = atomspace'                               │
+│                                                                         │
+│ /* No swarms initially */                                              │
+│ swarm_formations' = ⟨⟩                                                 │
+│                                                                         │
+│ /* No reconfigurations yet */                                          │
+│ last_config_gen' = 0                                                   │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * StartSystem Operation
+ *
+ * Starts the initialized system for normal operation.
+ *
+ * Pre-conditions:
+ * - System is initialized but not running
+ *
+ * Post-conditions:
+ * - System marked as running
+ * - All agents transitioned to IDLE or ACTIVE state
+ */
+┌─ StartSystem ──────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ initialized ∧ ¬ running                                                │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ running' = true                                                        │
+│                                                                         │
+│ /* All agents become operational */                                    │
+│ ∀ a : CogAgent | a ∈ ran agents ⇒                                      │
+│   (∃ a' : CogAgent | a' ∈ ran agents' ∧                                │
+│      a'.agent_id = a.agent_id ∧                                        │
+│      a'.state ∈ {cog_state_idle, cog_state_active})                    │
+│                                                                         │
+│ /* Monitor agent is active */                                          │
+│ ∃ a' : CogAgent | a' ∈ ran agents' ∧                                   │
+│   a'.agent_type = cog_agent_monitor ∧                                  │
+│   a'.state = cog_state_active                                          │
+│                                                                         │
+│ /* AtomSpace unchanged */                                              │
+│ atomspace' = atomspace                                                 │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * ShutdownSystem Operation
+ *
+ * Gracefully shuts down the system.
+ *
+ * Pre-conditions:
+ * - System is running
+ *
+ * Post-conditions:
+ * - All agents shutdown
+ * - All swarms disbanded
+ * - AtomSpace persisted
+ * - System marked as not running
+ */
+┌─ ShutdownSystem ───────────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ persist_path? : NAME                                                   │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ running                                                                │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ running' = false                                                       │
+│                                                                         │
+│ /* All agents shutdown */                                              │
+│ ∀ a' : CogAgent | a' ∈ ran agents' ⇒                                   │
+│   a'.state = cog_state_shutdown                                        │
+│                                                                         │
+│ /* All swarms disbanded */                                             │
+│ swarm_formations' = ⟨⟩                                                 │
+│                                                                         │
+│ /* AtomSpace persisted */                                              │
+│ atomspace_serialized(atomspace, persist_path?)                         │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 2: ATOMSPACE OPERATIONS
+ *===========================================================================*/
+
+/**
+ * AddModuleAtom Operation
+ *
+ * Adds a new rsync module to the AtomSpace.
+ *
+ * Pre-conditions:
+ * - Module with given name doesn't already exist
+ * - Module path is valid
+ *
+ * Post-conditions:
+ * - New module atom created with default TV/AV
+ * - Atom count incremented
+ * - Handle assigned
+ */
+┌─ AddModuleAtom ────────────────────────────────────────────────────────┐
+│ ΔAtomSpace                                                             │
+│ module_name? : NAME                                                    │
+│ module_path? : NAME                                                    │
+│ read_only? : 𝔹                                                         │
+│ new_handle! : HANDLE                                                   │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ module_name? ≠ ∅ ∧ module_path? ≠ ∅                                    │
+│ ¬ ∃ a : Atom | a ∈ ran atom_table ∧                                    │
+│                a.atom_type = atom_module ∧                             │
+│                a.name = module_name?                                   │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ ∃ new_atom : ModuleAtom |                                              │
+│   new_atom.handle = next_handle ∧                                      │
+│   new_atom.name = module_name? ∧                                       │
+│   new_atom.module_path = module_path? ∧                                │
+│   new_atom.read_only = read_only? ∧                                    │
+│   new_atom.tv = DefaultTruthValue ∧                                    │
+│   new_atom.av = DefaultAttentionValue ∧                                │
+│   new_atom.access_count = 0 ∧                                          │
+│   atom_table' = atom_table ∪ {new_atom.handle ↦ new_atom}              │
+│                                                                         │
+│ new_handle! = next_handle                                              │
+│ next_handle' = next_handle + 1                                         │
+│ atom_count' = atom_count + 1                                           │
+│                                                                         │
+│ /* Links unchanged */                                                  │
+│ link_table' = link_table                                               │
+│ link_count' = link_count                                               │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * AddSyncTopologyLink Operation
+ *
+ * Creates a sync topology link between module and host atoms.
+ *
+ * Pre-conditions:
+ * - Both module and host atoms exist
+ * - Link doesn't already exist
+ *
+ * Post-conditions:
+ * - New link created
+ * - Link count incremented
+ */
+┌─ AddSyncTopologyLink ──────────────────────────────────────────────────┐
+│ ΔAtomSpace                                                             │
+│ module_handle? : HANDLE                                                │
+│ host_handle? : HANDLE                                                  │
+│ new_link_handle! : HANDLE                                              │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ module_handle? ∈ dom atom_table                                        │
+│ host_handle? ∈ dom atom_table                                          │
+│ atom_table(module_handle?).atom_type = atom_module                     │
+│ atom_table(host_handle?).atom_type = atom_host                         │
+│                                                                         │
+│ /* Link doesn't exist */                                               │
+│ ¬ ∃ l : AtomLink | l ∈ ran link_table ∧                                │
+│                    l.link_type = link_sync_topology ∧                  │
+│                    l.outgoing(1).handle = module_handle? ∧             │
+│                    l.outgoing(2).handle = host_handle?                 │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ ∃ new_link : SyncTopologyLink |                                        │
+│   new_link.handle = next_handle ∧                                      │
+│   new_link.outgoing = ⟨atom_table(module_handle?),                     │
+│                         atom_table(host_handle?)⟩ ∧                    │
+│   new_link.tv = DefaultTruthValue ∧                                    │
+│   new_link.av = DefaultAttentionValue ∧                                │
+│   link_table' = link_table ∪ {new_link.handle ↦ new_link}              │
+│                                                                         │
+│ new_link_handle! = next_handle                                         │
+│ next_handle' = next_handle + 1                                         │
+│ link_count' = link_count + 1                                           │
+│                                                                         │
+│ /* Atoms unchanged */                                                  │
+│ atom_table' = atom_table                                               │
+│ atom_count' = atom_count                                               │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * UpdateTruthValue Operation
+ *
+ * Updates the truth value of an atom based on new evidence.
+ *
+ * Pre-conditions:
+ * - Atom exists
+ * - New strength and confidence are valid
+ *
+ * Post-conditions:
+ * - Atom's truth value updated
+ * - Access count incremented
+ * - Last accessed time updated
+ */
+┌─ UpdateTruthValue ─────────────────────────────────────────────────────┐
+│ ΔAtomSpace                                                             │
+│ atom_handle? : HANDLE                                                  │
+│ new_strength? : ℝ                                                      │
+│ new_confidence? : ℝ                                                    │
+│ current_time? : TIMESTAMP                                              │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ atom_handle? ∈ dom atom_table                                          │
+│ 0.0 ≤ new_strength? ≤ 1.0                                              │
+│ 0.0 ≤ new_confidence? ≤ 1.0                                            │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ ∃ old_atom, new_atom : Atom |                                          │
+│   old_atom = atom_table(atom_handle?) ∧                                │
+│   new_atom.handle = old_atom.handle ∧                                  │
+│   new_atom.atom_type = old_atom.atom_type ∧                            │
+│   new_atom.name = old_atom.name ∧                                      │
+│   new_atom.tv.strength = new_strength? ∧                               │
+│   new_atom.tv.confidence = new_confidence? ∧                           │
+│   new_atom.av = old_atom.av ∧                                          │
+│   new_atom.access_count = old_atom.access_count + 1 ∧                  │
+│   new_atom.last_accessed = current_time? ∧                             │
+│   atom_table' = atom_table ⊕ {atom_handle? ↦ new_atom}                 │
+│                                                                         │
+│ /* Counts unchanged */                                                 │
+│ atom_count' = atom_count                                               │
+│ link_table' = link_table                                               │
+│ link_count' = link_count                                               │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * UpdateAttentionValue Operation
+ *
+ * Updates attention (STI/LTI) for an atom based on activity.
+ *
+ * Pre-conditions:
+ * - Atom exists
+ * - New attention values are within bounds
+ *
+ * Post-conditions:
+ * - Atom's attention values updated
+ * - Attention queue may be reordered
+ */
+┌─ UpdateAttentionValue ─────────────────────────────────────────────────┐
+│ ΔAtomSpace                                                             │
+│ atom_handle? : HANDLE                                                  │
+│ new_sti? : ℤ                                                           │
+│ new_lti? : ℤ                                                           │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ atom_handle? ∈ dom atom_table                                          │
+│ -32768 ≤ new_sti? ≤ 32767                                              │
+│ -32768 ≤ new_lti? ≤ 32767                                              │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ ∃ old_atom, new_atom : Atom |                                          │
+│   old_atom = atom_table(atom_handle?) ∧                                │
+│   new_atom.handle = old_atom.handle ∧                                  │
+│   new_atom.atom_type = old_atom.atom_type ∧                            │
+│   new_atom.name = old_atom.name ∧                                      │
+│   new_atom.tv = old_atom.tv ∧                                          │
+│   new_atom.av.sti = new_sti? ∧                                         │
+│   new_atom.av.lti = new_lti? ∧                                         │
+│   new_atom.av.vlti = old_atom.av.vlti ∧                                │
+│   atom_table' = atom_table ⊕ {atom_handle? ↦ new_atom}                 │
+│                                                                         │
+│ /* Attention queue updated (sorted by STI descending) */               │
+│ attention_queue' = sort_by_sti(ran atom_table')                        │
+│                                                                         │
+│ /* Counts unchanged */                                                 │
+│ atom_count' = atom_count                                               │
+│ link_count' = link_count                                               │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 3: SWARM FORMATION OPERATIONS
+ *===========================================================================*/
+
+/**
+ * CreateSwarmFormation Operation
+ *
+ * Creates a new swarm formation for coordinated sync.
+ *
+ * Pre-conditions:
+ * - Swarm name is unique
+ * - At least 2 members provided
+ * - All member atoms exist
+ *
+ * Post-conditions:
+ * - New swarm atom created in AtomSpace
+ * - SwarmFormation created with members
+ * - Swarm links created for each member
+ * - Swarm in FORMING state
+ */
+┌─ CreateSwarmFormation ─────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ swarm_name? : NAME                                                     │
+│ member_handles? : seq HANDLE                                           │
+│ swarm_id! : HANDLE                                                     │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ swarm_name? ≠ ∅                                                        │
+│ #member_handles? ≥ 2                                                   │
+│                                                                         │
+│ /* Swarm doesn't exist */                                              │
+│ ¬ ∃ sf : SwarmFormation | sf ∈ ran swarm_formations ∧                  │
+│                           sf.name = swarm_name?                        │
+│                                                                         │
+│ /* All members exist in AtomSpace */                                   │
+│ ∀ h : HANDLE | h ∈ ran member_handles? ⇒                               │
+│   h ∈ dom atomspace.atom_table                                         │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ ∃ swarm_atom : SwarmAtom |                                             │
+│   swarm_atom.swarm_name = swarm_name? ∧                                │
+│   swarm_atom.member_count = #member_handles? ∧                         │
+│   swarm_atom.handle = atomspace.next_handle ∧                          │
+│   swarm_atom ∈ ran atomspace'.atom_table                               │
+│                                                                         │
+│ ∃ new_swarm : SwarmFormation |                                         │
+│   new_swarm.swarm_id = atomspace.next_handle ∧                         │
+│   new_swarm.name = swarm_name? ∧                                       │
+│   new_swarm.state = swarm_forming ∧                                    │
+│   new_swarm.member_count = #member_handles? ∧                          │
+│   new_swarm.coordinator = swarm_coordinator ∧                          │
+│   new_swarm.swarm_atom = swarm_atom ∧                                  │
+│   new_swarm.total_syncs = 0 ∧                                          │
+│   new_swarm.total_bytes = 0 ∧                                          │
+│   swarm_formations' = swarm_formations ⌢ ⟨new_swarm⟩                   │
+│                                                                         │
+│ /* Create swarm member links */                                        │
+│ ∀ h : HANDLE | h ∈ ran member_handles? ⇒                               │
+│   ∃ link : SwarmMemberLink |                                           │
+│     link.outgoing(1) = swarm_atom ∧                                    │
+│     link.outgoing(2) = atomspace.atom_table(h) ∧                       │
+│     link ∈ ran atomspace'.link_table                                   │
+│                                                                         │
+│ swarm_id! = atomspace.next_handle                                      │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * ActivateSwarm Operation
+ *
+ * Transitions swarm from FORMING to ACTIVE state.
+ *
+ * Pre-conditions:
+ * - Swarm exists and is in FORMING state
+ * - All members have valid configurations
+ *
+ * Post-conditions:
+ * - Swarm state changed to ACTIVE
+ * - All members in ACTIVE state
+ * - Swarm ready for coordination
+ */
+┌─ ActivateSwarm ────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ swarm_id? : HANDLE                                                     │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ ∃ swarm : SwarmFormation | swarm ∈ ran swarm_formations ∧              │
+│   swarm.swarm_id = swarm_id? ∧                                         │
+│   swarm.state = swarm_forming ∧                                        │
+│   swarm.member_count ≥ 2                                               │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ ∃ old_swarm, new_swarm : SwarmFormation |                              │
+│   old_swarm ∈ ran swarm_formations ∧                                   │
+│   old_swarm.swarm_id = swarm_id? ∧                                     │
+│   new_swarm.swarm_id = old_swarm.swarm_id ∧                            │
+│   new_swarm.name = old_swarm.name ∧                                    │
+│   new_swarm.state = swarm_active ∧                                     │
+│   new_swarm.members = old_swarm.members ∧                              │
+│   new_swarm.member_count = old_swarm.member_count ∧                    │
+│   new_swarm ∈ ran swarm_formations'                                    │
+│                                                                         │
+│ /* All members become active */                                        │
+│ ∀ m : SwarmMember | m ∈ ran new_swarm.members ⇒                        │
+│   m.state = swarm_active                                               │
+│                                                                         │
+│ /* Swarm coordinator is active */                                      │
+│ swarm_coordinator'.state = cog_state_active                            │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 4: SYNC OPERATIONS
+ *===========================================================================*/
+
+/**
+ * InitiateSync Operation
+ *
+ * Initiates a synchronization operation for a module.
+ *
+ * Pre-conditions:
+ * - Module atom exists
+ * - Host atom exists or is implicit
+ * - System is running
+ *
+ * Post-conditions:
+ * - Sync operation recorded
+ * - Module's access count incremented
+ * - PLN prediction requested
+ */
+┌─ InitiateSync ─────────────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ module_handle? : HANDLE                                                │
+│ host_handle? : HANDLE                                                  │
+│ predicted_success! : TruthValue                                        │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ running                                                                │
+│ module_handle? ∈ dom atomspace.atom_table                              │
+│ host_handle? ∈ dom atomspace.atom_table                                │
+│ atomspace.atom_table(module_handle?).atom_type = atom_module           │
+│ atomspace.atom_table(host_handle?).atom_type = atom_host               │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ /* PLN predicts sync success */                                        │
+│ predicted_success! = pln_predict_sync_success(                         │
+│   pln_context,                                                         │
+│   atomspace.atom_table(module_handle?),                                │
+│   atomspace.atom_table(host_handle?))                                  │
+│                                                                         │
+│ /* Module atom accessed */                                             │
+│ ∃ old_module, new_module : Atom |                                      │
+│   old_module = atomspace.atom_table(module_handle?) ∧                  │
+│   new_module.access_count = old_module.access_count + 1 ∧              │
+│   new_module ∈ ran atomspace'.atom_table                               │
+│                                                                         │
+│ /* Prediction count incremented */                                     │
+│ pln_context'.predictions_made =                                        │
+│   pln_context.predictions_made + 1                                     │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * RecordSyncSuccess Operation
+ *
+ * Records a successful sync operation and updates learning.
+ *
+ * Pre-conditions:
+ * - Sync was initiated
+ * - Module and host exist
+ *
+ * Post-conditions:
+ * - Sync history entry created
+ * - Module truth value updated (increased strength/confidence)
+ * - Module attention increased (STI++)
+ * - Production monitor updated
+ */
+┌─ RecordSyncSuccess ────────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ module_handle? : HANDLE                                                │
+│ host_handle? : HANDLE                                                  │
+│ bytes_transferred? : ℕ                                                 │
+│ duration? : ℕ                                                          │
+│ current_time? : TIMESTAMP                                              │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ module_handle? ∈ dom atomspace.atom_table                              │
+│ host_handle? ∈ dom atomspace.atom_table                                │
+│ bytes_transferred? ≥ 0                                                 │
+│ duration? > 0                                                          │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ /* Create history entry */                                             │
+│ ∃ new_entry : SyncHistoryEntry |                                       │
+│   new_entry.entry_id = learning_context.history_count + 1 ∧            │
+│   new_entry.module_name =                                              │
+│     atomspace.atom_table(module_handle?).name ∧                        │
+│   new_entry.host_name =                                                │
+│     atomspace.atom_table(host_handle?).name ∧                          │
+│   new_entry.success = true ∧                                           │
+│   new_entry.bytes_transferred = bytes_transferred? ∧                   │
+│   new_entry.duration = duration? ∧                                     │
+│   new_entry.timestamp = current_time? ∧                                │
+│   new_entry ∈ ran learning_context'.history                            │
+│                                                                         │
+│ /* Update module truth value (strengthen) */                           │
+│ ∃ old_module, new_module : Atom |                                      │
+│   old_module = atomspace.atom_table(module_handle?) ∧                  │
+│   new_module.tv.strength =                                             │
+│     min(1.0, old_module.tv.strength + 0.05) ∧                          │
+│   new_module.tv.confidence =                                           │
+│     min(1.0, old_module.tv.confidence + 0.01) ∧                        │
+│   new_module ∈ ran atomspace'.atom_table                               │
+│                                                                         │
+│ /* Increase attention */                                               │
+│ new_module.av.sti = min(32767, old_module.av.sti + 10)                 │
+│                                                                         │
+│ /* Update production monitor */                                        │
+│ production_monitor'.successful_sync_ops =                              │
+│   production_monitor.successful_sync_ops + 1                           │
+│ production_monitor'.total_sync_ops =                                   │
+│   production_monitor.total_sync_ops + 1                                │
+│ production_monitor'.total_bytes_synced =                               │
+│   production_monitor.total_bytes_synced + bytes_transferred?           │
+│                                                                         │
+│ /* Update learning stats */                                            │
+│ learning_context'.stats.predictions_correct =                          │
+│   learning_context.stats.predictions_correct + 1                       │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * RecordSyncFailure Operation
+ *
+ * Records a failed sync operation and updates learning.
+ *
+ * Pre-conditions:
+ * - Sync was initiated
+ * - Module and host exist
+ *
+ * Post-conditions:
+ * - Sync history entry created with failure
+ * - Module truth value updated (decreased strength)
+ * - Module attention may decrease
+ * - Production monitor updated
+ */
+┌─ RecordSyncFailure ────────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ module_handle? : HANDLE                                                │
+│ host_handle? : HANDLE                                                  │
+│ error_code? : ℤ                                                        │
+│ current_time? : TIMESTAMP                                              │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ module_handle? ∈ dom atomspace.atom_table                              │
+│ host_handle? ∈ dom atomspace.atom_table                                │
+│ error_code? ≠ 0                                                        │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ /* Create history entry */                                             │
+│ ∃ new_entry : SyncHistoryEntry |                                       │
+│   new_entry.entry_id = learning_context.history_count + 1 ∧            │
+│   new_entry.module_name =                                              │
+│     atomspace.atom_table(module_handle?).name ∧                        │
+│   new_entry.host_name =                                                │
+│     atomspace.atom_table(host_handle?).name ∧                          │
+│   new_entry.success = false ∧                                          │
+│   new_entry.error_code = error_code? ∧                                 │
+│   new_entry.timestamp = current_time? ∧                                │
+│   new_entry ∈ ran learning_context'.history                            │
+│                                                                         │
+│ /* Update module truth value (weaken) */                               │
+│ ∃ old_module, new_module : Atom |                                      │
+│   old_module = atomspace.atom_table(module_handle?) ∧                  │
+│   new_module.tv.strength =                                             │
+│     max(0.0, old_module.tv.strength - 0.1) ∧                           │
+│   new_module.tv.confidence = old_module.tv.confidence ∧                │
+│   new_module ∈ ran atomspace'.atom_table                               │
+│                                                                         │
+│ /* Decrease attention for repeated failures */                         │
+│ old_module.tv.strength < 0.5 ⇒                                         │
+│   new_module.av.sti = max(-32768, old_module.av.sti - 20)              │
+│                                                                         │
+│ /* Update production monitor */                                        │
+│ production_monitor'.failed_sync_ops =                                  │
+│   production_monitor.failed_sync_ops + 1                               │
+│ production_monitor'.total_sync_ops =                                   │
+│   production_monitor.total_sync_ops + 1                                │
+│                                                                         │
+│ /* Update learning stats */                                            │
+│ learning_context'.stats.predictions_incorrect =                        │
+│   learning_context.stats.predictions_incorrect + 1                     │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 5: PLN INFERENCE OPERATIONS
+ *===========================================================================*/
+
+/**
+ * ApplyPLNDeduction Operation
+ *
+ * Applies PLN deduction rule: if A→B and B→C, infer A→C.
+ *
+ * Pre-conditions:
+ * - Two links exist representing A→B and B→C
+ * - Confidence exceeds threshold
+ *
+ * Post-conditions:
+ * - New inferred link A→C created if not exists
+ * - Inferred truth value calculated using PLN formulas
+ * - Inference count incremented
+ */
+┌─ ApplyPLNDeduction ────────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ link_ab? : HANDLE                                                      │
+│ link_bc? : HANDLE                                                      │
+│ new_link_handle! : HANDLE                                              │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ link_ab? ∈ dom atomspace.link_table                                    │
+│ link_bc? ∈ dom atomspace.link_table                                    │
+│                                                                         │
+│ ∃ l_ab, l_bc : AtomLink |                                              │
+│   l_ab = atomspace.link_table(link_ab?) ∧                              │
+│   l_bc = atomspace.link_table(link_bc?) ∧                              │
+│   /* B is common middle term */                                        │
+│   l_ab.outgoing(2) = l_bc.outgoing(1) ∧                                │
+│   /* Sufficient confidence */                                          │
+│   l_ab.tv.confidence ≥ pln_context.confidence_threshold ∧              │
+│   l_bc.tv.confidence ≥ pln_context.confidence_threshold                │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ ∃ l_ab, l_bc, l_ac : AtomLink |                                        │
+│   l_ab = atomspace.link_table(link_ab?) ∧                              │
+│   l_bc = atomspace.link_table(link_bc?) ∧                              │
+│   /* Create A→C link */                                                │
+│   l_ac.outgoing = ⟨l_ab.outgoing(1), l_bc.outgoing(2)⟩ ∧               │
+│   /* Calculate inferred truth value using PLN formula */               │
+│   l_ac.tv.strength =                                                   │
+│     l_ab.tv.strength × l_bc.tv.strength ∧                              │
+│   l_ac.tv.confidence =                                                 │
+│     min(l_ab.tv.confidence, l_bc.tv.confidence) × 0.9 ∧                │
+│   l_ac ∈ ran atomspace'.link_table                                     │
+│                                                                         │
+│ new_link_handle! = l_ac.handle                                         │
+│                                                                         │
+│ /* Update PLN statistics */                                            │
+│ pln_context'.inferences_performed =                                    │
+│   pln_context.inferences_performed + 1                                 │
+│ pln_context'.rules_applied =                                           │
+│   pln_context.rules_applied + 1                                        │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * DiscoverSyncPattern Operation
+ *
+ * Discovers a sync pattern from historical data using PLN induction.
+ *
+ * Pre-conditions:
+ * - Sufficient history entries exist for module
+ * - Learning context is active
+ *
+ * Post-conditions:
+ * - New SyncPattern created
+ * - Pattern added to PLN context
+ * - Statistics updated
+ */
+┌─ DiscoverSyncPattern ──────────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ module_name? : NAME                                                    │
+│ min_observations? : ℕ                                                  │
+│ pattern_found! : 𝔹                                                     │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ min_observations? ≥ 10                                                 │
+│                                                                         │
+│ /* Sufficient history for this module */                               │
+│ #({h : SyncHistoryEntry | h ∈ ran learning_context.history ∧           │
+│    h.module_name = module_name?}) ≥ min_observations?                  │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ ∃ relevant_history : seq SyncHistoryEntry |                            │
+│   relevant_history = {h : SyncHistoryEntry |                           │
+│     h ∈ ran learning_context.history ∧                                 │
+│     h.module_name = module_name?} ∧                                    │
+│                                                                         │
+│   ∃ new_pattern : SyncPattern |                                        │
+│     new_pattern.module_name = module_name? ∧                           │
+│     new_pattern.total_syncs = #relevant_history ∧                      │
+│     new_pattern.successful_syncs =                                     │
+│       #{h : SyncHistoryEntry | h ∈ ran relevant_history ∧              │
+│          h.success = true} ∧                                           │
+│     new_pattern.failed_syncs =                                         │
+│       new_pattern.total_syncs - new_pattern.successful_syncs ∧         │
+│     new_pattern.success_rate =                                         │
+│       new_pattern.successful_syncs / new_pattern.total_syncs ∧         │
+│     /* Predicted success based on pattern */                           │
+│     new_pattern.predicted_success.strength =                           │
+│       new_pattern.success_rate ∧                                       │
+│     new_pattern.predicted_success.confidence =                         │
+│       min(1.0, new_pattern.total_syncs / 100.0) ∧                      │
+│     new_pattern ∈ ran pln_context'.sync_patterns                       │
+│                                                                         │
+│ pattern_found! = true                                                  │
+│                                                                         │
+│ /* Update learning statistics */                                       │
+│ learning_context'.stats.patterns_learned =                             │
+│   learning_context.stats.patterns_learned + 1                          │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 6: DYNAMIC RECONFIGURATION OPERATIONS
+ *===========================================================================*/
+
+/**
+ * TriggerAutoReconfiguration Operation
+ *
+ * Automatically triggers reconfiguration when performance drops.
+ *
+ * Pre-conditions:
+ * - Auto-reconfiguration is enabled
+ * - Performance is below threshold
+ * - Minimum interval has passed
+ *
+ * Post-conditions:
+ * - New configuration generated
+ * - AtomSpace optimized (low-performing atoms removed)
+ * - Reconfiguration counter incremented
+ */
+┌─ TriggerAutoReconfiguration ───────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ current_time? : TIMESTAMP                                              │
+│ output_path? : NAME                                                    │
+│ reconfig_triggered! : 𝔹                                                │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ reconfig_context.auto_enabled                                          │
+│ production_monitor.success_rate < reconfig_context.threshold           │
+│ current_time? ≥                                                        │
+│   reconfig_context.last_reconfig_time +                                │
+│   reconfig_context.min_interval                                        │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ /* Remove low-performing atoms */                                      │
+│ ∀ a : Atom | a ∈ ran atomspace.atom_table ∧                            │
+│              a.atom_type = atom_module ∧                               │
+│              a.tv.strength < 0.3 ∧                                     │
+│              a.av.sti < 0 ⇒                                            │
+│   a.handle ∉ dom atomspace'.atom_table                                 │
+│                                                                         │
+│ /* Generate new configuration */                                       │
+│ config_generated(agent_zero, atomspace', output_path?)                 │
+│                                                                         │
+│ /* Update reconfiguration context */                                   │
+│ reconfig_context'.reconfig_count =                                     │
+│   reconfig_context.reconfig_count + 1                                  │
+│ reconfig_context'.last_reconfig_time = current_time?                   │
+│ reconfig_context'.last_success_rate =                                  │
+│   production_monitor.success_rate                                      │
+│                                                                         │
+│ reconfig_triggered! = true                                             │
+│                                                                         │
+│ /* Update system timestamp */                                          │
+│ last_config_gen' = current_time?                                       │
+└────────────────────────────────────────────────────────────────────────┘
+
+/**
+ * GenerateConfiguration Operation
+ *
+ * Generates rsyncd.conf from current AtomSpace state.
+ *
+ * Pre-conditions:
+ * - Agent Zero is operational
+ * - AtomSpace contains at least one module
+ *
+ * Post-conditions:
+ * - Configuration file written
+ * - All modules represented with TV/AV metadata
+ * - Swarm formations included
+ * - Generation timestamp recorded
+ */
+┌─ GenerateConfiguration ────────────────────────────────────────────────┐
+│ ΞSystemState                                                           │
+│ output_path? : NAME                                                    │
+│ current_time? : TIMESTAMP                                              │
+│ success! : 𝔹                                                           │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ agent_zero.state ∈ {cog_state_idle, cog_state_active}                  │
+│ ∃ a : Atom | a ∈ ran atomspace.atom_table ∧                            │
+│              a.atom_type = atom_module                                 │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ /* Configuration file contains all modules */                          │
+│ ∀ a : Atom | a ∈ ran atomspace.atom_table ∧                            │
+│              a.atom_type = atom_module ⇒                               │
+│   config_file_contains_module(output_path?, a)                         │
+│                                                                         │
+│ /* Each module entry includes cognitive metadata */                    │
+│ ∀ a : ModuleAtom | a ∈ ran atomspace.atom_table ⇒                      │
+│   config_includes_metadata(output_path?, a.handle,                     │
+│                           a.tv, a.av)                                  │
+│                                                                         │
+│ /* Swarm formations included */                                        │
+│ ∀ sf : SwarmFormation | sf ∈ ran swarm_formations ∧                    │
+│                        sf.state = swarm_active ⇒                       │
+│   config_includes_swarm(output_path?, sf)                              │
+│                                                                         │
+│ success! = true                                                        │
+│ last_config_gen' = current_time?                                       │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*=============================================================================
+ * SECTION 7: DISTRIBUTED ATOMSPACE OPERATIONS
+ *===========================================================================*/
+
+/**
+ * SyncDistributedAtomSpace Operation
+ *
+ * Synchronizes AtomSpace with a remote node.
+ *
+ * Pre-conditions:
+ * - Remote node exists and is connected
+ * - Local AtomSpace has changes to propagate
+ *
+ * Post-conditions:
+ * - Changed atoms sent to remote node
+ * - Remote changes merged locally
+ * - Conflicts resolved according to strategy
+ * - Sync statistics updated
+ */
+┌─ SyncDistributedAtomSpace ─────────────────────────────────────────────┐
+│ ΔSystemState                                                           │
+│ node_id? : HANDLE                                                      │
+│ current_time? : TIMESTAMP                                              │
+│ atoms_sent! : ℕ                                                        │
+│ atoms_received! : ℕ                                                    │
+│ conflicts! : ℕ                                                         │
+├────────────────────────────────────────────────────────────────────────┤
+│ /* Pre-conditions */                                                   │
+│ ∃ node : AtomSpaceNode | node ∈ ran distributed_as.nodes ∧             │
+│   node.node_id = node_id? ∧                                            │
+│   node.connected = true                                                │
+│                                                                         │
+│ /* Post-conditions */                                                  │
+│ /* Atoms created/modified since last sync are sent */                  │
+│ ∃ changed_atoms : ℙ Atom |                                             │
+│   changed_atoms = {a : Atom | a ∈ ran atomspace.atom_table ∧           │
+│     a.last_accessed > node.last_sync} ∧                                │
+│   atoms_sent! = #changed_atoms                                         │
+│                                                                         │
+│ /* Receive atoms from remote */                                        │
+│ ∃ received_atoms : ℙ Atom |                                            │
+│   atoms_received! = #received_atoms ∧                                  │
+│   /* Merge received atoms into local AtomSpace */                      │
+│   ∀ remote_atom : Atom | remote_atom ∈ received_atoms ⇒                │
+│     ∃ local_atom : Atom |                                              │
+│       (remote_atom.handle ∈ dom atomspace.atom_table ⇒                 │
+│         /* Conflict resolution */                                      │
+│         resolve_conflict(distributed_as.conflict_resolution,           │
+│                         atomspace.atom_table(remote_atom.handle),      │
+│                         remote_atom, local_atom)) ∧                    │
+│       local_atom ∈ ran atomspace'.atom_table                           │
+│                                                                         │
+│ /* Count conflicts */                                                  │
+│ conflicts! = #{a : Atom | a ∈ received_atoms ∧                         │
+│                           a.handle ∈ dom atomspace.atom_table}         │
+│                                                                         │
+│ /* Update node sync state */                                           │
+│ ∃ old_node, new_node : AtomSpaceNode |                                 │
+│   old_node ∈ ran distributed_as.nodes ∧                                │
+│   old_node.node_id = node_id? ∧                                        │
+│   new_node.node_id = old_node.node_id ∧                                │
+│   new_node.last_sync = current_time? ∧                                 │
+│   new_node.atoms_synced = old_node.atoms_synced + atoms_sent! ∧        │
+│   new_node ∈ ran distributed_as'.nodes                                 │
+│                                                                         │
+│ /* Update distributed statistics */                                    │
+│ distributed_as'.atoms_sent =                                           │
+│   distributed_as.atoms_sent + atoms_sent!                              │
+│ distributed_as'.atoms_received =                                       │
+│   distributed_as.atoms_received + atoms_received!                      │
+│ distributed_as'.conflicts_resolved =                                   │
+│   distributed_as.conflicts_resolved + conflicts!                       │
+│ distributed_as'.last_incremental_sync = current_time?                  │
+└────────────────────────────────────────────────────────────────────────┘
+
+/*******************************************************************************
+ * END OF OPERATIONS SPECIFICATION
+ *
+ * This specification defines all state-modifying operations in the RsyncOG
+ * cognitive architecture. Each operation preserves the system invariants
+ * defined in the System State specification.
+ ******************************************************************************/
