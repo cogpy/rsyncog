@@ -91,11 +91,18 @@ opencog_example$(EXEEXT): opencog_example.o $(OPENCOG_OBJ)
 opencog_future_demo$(EXEEXT): opencog_future_demo.o $(OPENCOG_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ opencog_future_demo.o $(OPENCOG_OBJ) -lm
 
+# OpenCog production integration demo
+opencog_production_demo$(EXEEXT): opencog_production_demo.o $(OPENCOG_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ opencog_production_demo.o $(OPENCOG_OBJ) -lm
+
 .PHONY: opencog-example
 opencog-example: opencog_example$(EXEEXT)
 
 .PHONY: opencog-future-demo
 opencog-future-demo: opencog_future_demo$(EXEEXT)
+
+.PHONY: opencog-production-demo
+opencog-production-demo: opencog_production_demo$(EXEEXT)
 
 .PHONY: install
 install: all
