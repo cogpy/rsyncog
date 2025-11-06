@@ -13,7 +13,7 @@ AC_CHECK_HEADERS(sys/fcntl.h sys/select.h fcntl.h sys/time.h sys/unistd.h \
     sys/acl.h acl/libacl.h attr/xattr.h sys/xattr.h sys/extattr.h dl.h \
     popt.h popt/popt.h linux/falloc.h netinet/in_systm.h netgroup.h \
     zlib.h xxhash.h openssl/md4.h openssl/md5.h zstd.h lz4.h sys/file.h \
-    bsd/string.h)
+    bsd/string.h ggml.h ggml/ggml.h llama.h)
 AC_CHECK_HEADERS([netinet/ip.h], [], [], [[#include <netinet/in.h>]])
 AC_HEADER_MAJOR_FIXED
 
@@ -584,6 +584,46 @@ if test x"$enable_lz4" != x"no"; then
     fi
 else
     AC_MSG_RESULT(no)
+fi
+
+dnl OpenCog GGML integration
+AC_MSG_CHECKING([whether to enable GGML tensor operations])
+AC_ARG_ENABLE([ggml],
+        AS_HELP_STRING([--enable-ggml], [enable to use GGML for tensor operations]))
+AH_TEMPLATE([SUPPORT_GGML],
+[Define if you want GGML tensor operations support.])
+if test x"$enable_ggml" = x"yes"; then
+    if test x"$ac_cv_header_ggml_h" = x"yes" || test x"$ac_cv_header_ggml_ggml_h" = x"yes"; then
+	AC_MSG_RESULT(yes)
+	AC_SEARCH_LIBS(ggml_init, ggml,
+	    [AC_DEFINE(SUPPORT_GGML)],
+	    [AC_MSG_WARN([GGML library not found - using stub implementation])])
+    else
+	AC_MSG_RESULT(no)
+	AC_MSG_WARN([GGML headers not found - using stub implementation])
+    fi
+else
+    AC_MSG_RESULT(no - using stub implementation)
+fi
+
+dnl OpenCog llama.cpp integration
+AC_MSG_CHECKING([whether to enable llama.cpp neural inference])
+AC_ARG_ENABLE([llama],
+        AS_HELP_STRING([--enable-llama], [enable to use llama.cpp for neural pattern recognition]))
+AH_TEMPLATE([SUPPORT_LLAMA],
+[Define if you want llama.cpp neural inference support.])
+if test x"$enable_llama" = x"yes"; then
+    if test x"$ac_cv_header_llama_h" = x"yes"; then
+	AC_MSG_RESULT(yes)
+	AC_SEARCH_LIBS(llama_model_load_from_file, llama,
+	    [AC_DEFINE(SUPPORT_LLAMA)],
+	    [AC_MSG_WARN([llama.cpp library not found - using stub implementation])])
+    else
+	AC_MSG_RESULT(no)
+	AC_MSG_WARN([llama.cpp headers not found - using stub implementation])
+    fi
+else
+    AC_MSG_RESULT(no - using stub implementation)
 fi
 
 if test x"$no_lib" != x; then
