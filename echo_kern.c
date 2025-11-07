@@ -882,21 +882,29 @@ float pln_unify_graph(struct atom *pattern, struct atom *target)
         similarity += 0.5f;
     }
     
-    /* Name similarity (simple string comparison) */
+    /* Name similarity (string comparison) */
     if (pattern->name && target->name) {
-        /* Simple character-level similarity */
-        size_t matching_chars = 0;
-        size_t max_len = 0;
-        
+        /* Calculate lengths */
+        size_t pattern_len = 0;
+        size_t target_len = 0;
         const char *p = pattern->name;
         const char *t = target->name;
         
-        while (*p && *t) {
-            if (*p == *t) matching_chars++;
-            p++;
-            t++;
-            max_len++;
+        while (*p++) pattern_len++;
+        while (*t++) target_len++;
+        
+        /* Compare character by character */
+        size_t matching_chars = 0;
+        p = pattern->name;
+        t = target->name;
+        size_t min_len = (pattern_len < target_len) ? pattern_len : target_len;
+        
+        for (size_t i = 0; i < min_len; i++) {
+            if (*p++ == *t++) matching_chars++;
         }
+        
+        /* Use maximum length for denominator to avoid inflated scores */
+        size_t max_len = (pattern_len > target_len) ? pattern_len : target_len;
         
         if (max_len > 0) {
             similarity += 0.3f * ((float)matching_chars / (float)max_len);
