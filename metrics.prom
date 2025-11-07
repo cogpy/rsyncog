@@ -6,13 +6,13 @@ opencog_uptime_seconds 0
 opencog_operations_total 50
 # HELP opencog_operations_successful Successful operations
 # TYPE opencog_operations_successful counter
-opencog_operations_successful 45
+opencog_operations_successful 48
 # HELP opencog_operations_failed Failed operations
 # TYPE opencog_operations_failed counter
-opencog_operations_failed 5
+opencog_operations_failed 2
 # HELP opencog_operation_duration_avg Average operation duration
 # TYPE opencog_operation_duration_avg gauge
-opencog_operation_duration_avg 34.680000
+opencog_operation_duration_avg 33.840000
 # HELP opencog_memory_allocated_bytes Total memory allocated
 # TYPE opencog_memory_allocated_bytes counter
 opencog_memory_allocated_bytes 51200
@@ -27,7 +27,7 @@ opencog_network_bytes_sent 51200
 opencog_network_bytes_received 25600
 # HELP opencog_network_errors_total Network errors
 # TYPE opencog_network_errors_total counter
-opencog_network_errors_total 5
+opencog_network_errors_total 2
 # HELP opencog_health_score System health score
 # TYPE opencog_health_score gauge
-opencog_health_score 0.855000
+opencog_health_score 0.940800
