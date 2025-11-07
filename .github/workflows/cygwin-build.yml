@@ -30,6 +30,8 @@ jobs:
         echo "C:/tools/cygwin/bin" >>$Env:GITHUB_PATH
     - name: commonmark
       run: bash -c 'python3 -mpip install --user commonmark'
+    - name: Generate autotools config files
+      run: bash -c 'autoreconf -i'
     - name: configure
       run: bash -c './configure --with-rrsync'
     - name: make
